@@ -116,7 +116,17 @@ export const api = {
       catalog_loading: boolean;
       objects: number;
       data_age_seconds: number | null;
-      llm_configured: boolean;
+      /**
+       * Resolved state of the explanation layer, not merely "a key exists".
+       * `configured: false` with a populated `detail` is the normal way a
+       * misconfigured key is surfaced.
+       */
+      llm: {
+        configured: boolean;
+        provider: string;
+        model: string;
+        detail: string;
+      };
       server_time: string;
       version: string;
     }>("/api/health"),

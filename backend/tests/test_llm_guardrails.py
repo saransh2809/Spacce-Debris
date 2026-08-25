@@ -158,8 +158,18 @@ class TestDeterministicFallback:
         from app.core.config import settings
         from app.llm.explainer import explain_conjunction
 
-        original = settings.anthropic_api_key
+        # Clear EVERY key source, not just the Anthropic one. `llm_api_key`
+        # resolves across the generic and both provider-specific settings, so
+        # blanking one still left a live key here once Gemini was configured
+        # and this test silently started calling a real API.
+        original = (
+            settings.llm_api_key_generic,
+            settings.anthropic_api_key,
+            settings.gemini_api_key,
+        )
+        settings.llm_api_key_generic = ""
         settings.anthropic_api_key = ""
+        settings.gemini_api_key = ""
         try:
             detail = {
                 "object_a": {
@@ -233,4 +243,8 @@ class TestDeterministicFallback:
             # It must state the assumption rather than bury it.
             assert "NOT an operational" in result.text or "not an operational" in result.text
         finally:
-            settings.anthropic_api_key = original
+            (
+                settings.llm_api_key_generic,
+                settings.anthropic_api_key,
+                settings.gemini_api_key,
+            ) = original

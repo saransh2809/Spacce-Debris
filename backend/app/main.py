@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, ORJSONResponse
 
 from app.api.routes import analysis, catalog as catalog_routes, conjunctions, propagation
 from app.core.config import settings
+from app.llm.providers import resolve_provider
 from app.core.logging import (
     STAGE_API,
     STAGE_DATA,
@@ -159,6 +160,19 @@ app.include_router(propagation.router)
 app.include_router(analysis.router)
 
 
+def _llm_status() -> dict:
+    """
+    Whether the explanation layer is actually usable.
+
+    Deliberately reports the RESOLVED provider rather than the presence of a
+    key. A Google key sitting in the Anthropic variable is not a working LLM,
+    and saying `llm_configured: true` for it hides the fault until someone
+    clicks Explain in front of an audience.
+    """
+    _, status = resolve_provider()
+    return status.as_dict()
+
+
 @app.get("/api/health", tags=["system"])
 async def health() -> dict:
     catalog = get_catalog()
@@ -171,7 +185,10 @@ async def health() -> dict:
         "catalog_loading": catalog.loading,
         "objects": len(catalog),
         "data_age_seconds": catalog.data_age_seconds(),
-        "llm_configured": bool(settings.anthropic_api_key),
+        # Resolved, not merely "a key exists": a key for the wrong vendor is
+        # not a configured LLM, and reporting it as one hides the failure until
+        # someone clicks Explain.
+        "llm": _llm_status(),
     }
 
 

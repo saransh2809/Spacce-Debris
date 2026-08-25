@@ -37,6 +37,7 @@ from typing import Any
 from app.core.config import settings
 from app.core.logging import STAGE_LLM, Timer, get_logger, log_event
 from app.llm.guardrails import audit_numbers, check_claims
+from app.llm.providers import resolve_provider
 
 log = get_logger("llm.explainer")
 
@@ -102,6 +103,7 @@ class Explanation:
     text: str
     model: str
     source: str                       # "llm" or "deterministic-template"
+    provider: str = "none"            # "anthropic", "gemini", "none", "unknown"
     audit: dict[str, Any] = field(default_factory=dict)
     claim_violations: list[str] = field(default_factory=list)
     elapsed_ms: float = 0.0
@@ -111,6 +113,7 @@ class Explanation:
         return {
             "explanation": self.text,
             "model": self.model,
+            "provider": self.provider,
             "source": self.source,
             "numeric_audit": self.audit,
             "claim_violations": self.claim_violations,
@@ -273,63 +276,57 @@ async def explain_conjunction(event_detail: dict) -> Explanation:
     Always returns an Explanation. Failure modes degrade to the deterministic
     template rather than to an empty panel or an invented one.
     """
+    import json
+
     payload = build_payload(event_detail)
     is_operational = bool(payload.get("is_operational_pc"))
 
-    if not settings.llm_enabled or not settings.anthropic_api_key:
+    provider, status = resolve_provider()
+
+    if provider is None:
         text = _deterministic_explanation(payload)
         return Explanation(
             text=text,
             model="none",
             source="deterministic-template",
+            provider=status.provider,
             audit=audit_numbers(text, payload).as_dict(),
             claim_violations=check_claims(text, is_operational),
-            error=(
-                None
-                if not settings.llm_enabled
-                else "No API key configured; served the deterministic template."
-            ),
+            error=None if not settings.llm_enabled else status.detail,
         )
 
-    import json
-
-    from anthropic import APIError, AsyncAnthropic
-
-    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+    user_prompt = (
+        "Explain this validated conjunction screening result. "
+        "Use only the values below.\n\n"
+        f"{json.dumps(payload, indent=2, default=str)}"
+    )
 
     with Timer() as timer:
         try:
-            message = await client.messages.create(
-                model=settings.llm_model,
-                max_tokens=settings.llm_max_tokens,
-                system=SYSTEM_PROMPT,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            "Explain this validated conjunction screening result. "
-                            "Use only the values below.\n\n"
-                            f"{json.dumps(payload, indent=2, default=str)}"
-                        ),
-                    }
-                ],
+            text = await provider.generate(
+                SYSTEM_PROMPT, user_prompt, settings.llm_max_tokens
             )
-            text = "".join(
-                block.text for block in message.content if block.type == "text"
-            ).strip()
             source = "llm"
             error = None
-        except (APIError, Exception) as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            # Every failure mode -- bad key, wrong vendor, rate limit, safety
+            # stop, network -- lands here and degrades to the template. The
+            # panel is never empty and never invented.
             log_event(
                 log,
                 STAGE_LLM,
                 "generation_failed",
                 level=logging.ERROR,
+                provider=provider.name,
+                model=provider.model,
                 error=str(exc),
             )
             text = _deterministic_explanation(payload)
             source = "deterministic-template"
-            error = f"LLM call failed ({exc}); served the deterministic template."
+            error = (
+                f"{provider.name} call failed ({exc}); served the deterministic "
+                "template."
+            )
 
     audit = audit_numbers(text, payload)
     violations = check_claims(text, is_operational)
@@ -338,6 +335,7 @@ async def explain_conjunction(event_detail: dict) -> Explanation:
         log,
         STAGE_LLM,
         "explanation_generated",
+        provider=provider.name,
         source=source,
         audit_passed=audit.passed,
         numbers_found=audit.numbers_found,
@@ -348,8 +346,9 @@ async def explain_conjunction(event_detail: dict) -> Explanation:
 
     return Explanation(
         text=text,
-        model=settings.llm_model if source == "llm" else "none",
+        model=provider.model if source == "llm" else "none",
         source=source,
+        provider=provider.name if source == "llm" else status.provider,
         audit=audit.as_dict(),
         claim_violations=violations,
         elapsed_ms=timer.ms,

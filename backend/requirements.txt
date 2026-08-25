@@ -15,6 +15,7 @@ scipy
 
 # LLM explanation layer (explanation ONLY -- no numerical authority)
 anthropic
+google-genai
 
 # Testing
 pytest

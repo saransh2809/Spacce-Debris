@@ -108,10 +108,33 @@ class Settings(BaseSettings):
     w_object_class: float = 0.05
 
     # -------------------------------------------------------------------- LLM
-    anthropic_api_key: str = ""
+    # The explanation layer is vendor-neutral. A key may be supplied either
+    # generically or under a provider-specific name; `llm_api_key` below
+    # resolves whichever is present.
+    llm_api_key_generic: str = ""      # KAKSHA_LLM_API_KEY
+    anthropic_api_key: str = ""        # KAKSHA_ANTHROPIC_API_KEY
+    gemini_api_key: str = ""           # KAKSHA_GEMINI_API_KEY
+    # "auto" infers the vendor from the model id, falling back to the key
+    # format. Set explicitly to override.
+    llm_provider: str = "auto"
     llm_model: str = "claude-opus-5"
     llm_max_tokens: int = 1200
     llm_enabled: bool = True
+
+    @property
+    def llm_api_key(self) -> str:
+        """
+        The key the explanation layer should use.
+
+        Generic first, then provider-specific. Two names exist because the
+        original build assumed Anthropic; keeping the old name working means an
+        existing .env does not silently stop authenticating after the upgrade.
+        """
+        return (
+            self.llm_api_key_generic
+            or self.anthropic_api_key
+            or self.gemini_api_key
+        ).strip()
 
     @property
     def risk_weights_sum(self) -> float:

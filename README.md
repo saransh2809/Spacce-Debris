@@ -100,17 +100,26 @@ network is not.
 
 ### Optional: the explanation layer
 
-Paste an Anthropic API key into `backend/.env`:
+Two providers are supported. Supply **one** key in `backend/.env`.
+
+**Google Gemini:**
+
+```
+KAKSHA_GEMINI_API_KEY=AIza...
+KAKSHA_LLM_MODEL=gemini-2.5-flash
+```
+
+**Anthropic Claude:**
 
 ```
 KAKSHA_ANTHROPIC_API_KEY=sk-ant-...
 KAKSHA_LLM_MODEL=claude-opus-5
 ```
 
-The key must be an **Anthropic** key (`sk-ant-…`) and the model an Anthropic
-model id — the layer is built on the Anthropic SDK, so a key or model id from
-another provider is rejected at call time rather than silently producing
-nothing.
+The provider is inferred from the model id, falling back to the key format.
+Set `KAKSHA_LLM_PROVIDER=anthropic|gemini` to override. If neither the model
+nor the key identifies a vendor, `/api/health` says so explicitly instead of
+failing later at call time.
 
 Without a key the system is **fully functional**. The explanation panel falls
 back to a deterministic template built directly from the numbers and labelled as
@@ -245,6 +254,11 @@ Three independent layers, because a system prompt is a request, not a guarantee:
 The audit result is displayed next to the explanation. The reader sees not just
 what the model said, but whether it can be trusted.
 
+All three layers operate on the finished text, so they hold identically
+whichever vendor generated it. Claude and Gemini are interchangeable here, and
+neither is given tools: automatic function calling is explicitly disabled on the
+Gemini path so no future edit can quietly open a route back into the pipeline.
+
 ---
 
 ## Verification
@@ -253,7 +267,7 @@ what the model said, but whether it can be trusted.
 cd backend && .venv/Scripts/python -m pytest -q
 ```
 
-**156 tests, ~1 second.** The important ones check against sources outside this
+**175 tests, ~1 second.** The important ones check against sources outside this
 project:
 
 - **SGP4 vs the published Vallado verification case** (catalogue 00005) —
@@ -264,6 +278,8 @@ project:
 - **Geostationary velocity in ITRF ≈ 0** — proves the ω × r transport term
 - **Brent TCA vs 0.01 s brute force** — the solver wins
 - **Numeric audit catches a fabricated altitude** planted in an explanation
+- **Provider routing** — a model id always outranks a contradicting key
+  format, so a Gemini key never gets sent to Anthropic or vice versa
 
 ---
 
