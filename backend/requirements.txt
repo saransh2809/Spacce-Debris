@@ -1,0 +1,21 @@
+# --- KAKSHA backend: numerical + service layer ---
+# Web / service
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+httpx
+python-dotenv
+orjson
+
+# Numerical / astrodynamics  (source of truth -- never bypassed)
+sgp4                  # Vallado/Kelso reference SGP4, C-accelerated
+numpy
+scipy
+
+# LLM explanation layer (explanation ONLY -- no numerical authority)
+anthropic
+
+# Testing
+pytest
+pytest-asyncio
