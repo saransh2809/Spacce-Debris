@@ -26,33 +26,77 @@ in a prompt.
 
 ## Quick start
 
-Two processes. Backend first — the frontend is useless without it, and says so
-rather than showing empty panels.
+**Prerequisites:** Python 3.11+, Node 18+, and an internet connection on first
+run (orbital elements are fetched live from CelesTrak).
 
-**Backend** (port 8000):
-
-```bash
-cd backend && .venv/Scripts/python -m uvicorn app.main:app --port 8000
-```
-
-**Frontend** (port 5173):
+### 1. Clone
 
 ```bash
-cd frontend && npm run dev
+git clone https://github.com/saransh2809/Spacce-Debris.git
 ```
 
-First launch downloads ~18,700 orbital element sets plus the SATCAT from
-CelesTrak and takes 30–60 seconds. Subsequent starts use the local cache.
+### 2. Install
 
-### First-time setup
+Backend:
 
 ```bash
 cd backend && python -m venv .venv && .venv/Scripts/python -m pip install -r requirements.txt
 ```
 
+Frontend:
+
 ```bash
 cd frontend && npm install
 ```
+
+### 3. Configure
+
+`backend/.env` is deliberately not in the repository — it holds secrets. Create
+your own from the template:
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Every setting in it is optional. The system runs fully without an API key; see
+*the explanation layer* below.
+
+### 4. Run
+
+Two processes, in two terminals. **Backend first** — the frontend is useless
+without it, and says so rather than showing empty panels.
+
+Backend (port 8000):
+
+```bash
+cd backend && .venv/Scripts/python -m uvicorn app.main:app --port 8000
+```
+
+Frontend (port 5173):
+
+```bash
+cd frontend && npm run dev
+```
+
+Then open **http://localhost:5173**.
+
+On Windows, `start-backend.cmd` and `start-frontend.cmd` in the repository root
+do the same thing and create the venv or install `node_modules` if either is
+missing. In PowerShell they need a `.\` prefix, and the path must be quoted if
+it contains spaces.
+
+First launch downloads ~18,700 orbital element sets plus the SATCAT from
+CelesTrak and takes 30–60 seconds. Subsequent starts use the local cache.
+
+### Verifying the install
+
+```bash
+cd backend && .venv/Scripts/python -m pytest -q
+```
+
+156 tests, about a second. These run entirely offline against fixed reference
+vectors, so a green suite means the numerical pipeline is sound even if the
+network is not.
 
 ### Optional: the explanation layer
 
@@ -60,11 +104,24 @@ Paste an Anthropic API key into `backend/.env`:
 
 ```
 KAKSHA_ANTHROPIC_API_KEY=sk-ant-...
+KAKSHA_LLM_MODEL=claude-opus-5
 ```
+
+The key must be an **Anthropic** key (`sk-ant-…`) and the model an Anthropic
+model id — the layer is built on the Anthropic SDK, so a key or model id from
+another provider is rejected at call time rather than silently producing
+nothing.
 
 Without a key the system is **fully functional**. The explanation panel falls
 back to a deterministic template built directly from the numbers and labelled as
 such. Nothing else changes, because nothing else depends on the model.
+
+### Ports
+
+The backend's CORS allowlist is `localhost:5173` and `127.0.0.1:5173`. If Vite
+starts on a different port because 5173 is taken, every API call will be blocked
+by the browser. Free 5173 rather than letting Vite pick another port, or add the
+new origin to `cors_origins` in `backend/app/core/config.py`.
 
 ---
 
