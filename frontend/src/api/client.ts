@@ -83,7 +83,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /** Build a query string, dropping null/undefined and expanding arrays. */
-function qs(params: Record<string, unknown>): string {
+function qs(params: object): string {
   const sp = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === null || value === "") continue;

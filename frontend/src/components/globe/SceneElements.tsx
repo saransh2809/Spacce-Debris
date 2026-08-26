@@ -142,7 +142,7 @@ export function OrbitPath({
   if (positionsKm.length < 6) return null;
 
   return (
-    <line ref={lineRef as never} geometry={geometry} raycast={() => null}>
+    <threeLine ref={lineRef as never} geometry={geometry} raycast={() => null}>
       {dashed ? (
         <lineDashedMaterial
           color={color}
@@ -160,7 +160,7 @@ export function OrbitPath({
           linewidth={linewidth}
         />
       )}
-    </line>
+    </threeLine>
   );
 }
 
@@ -220,9 +220,9 @@ export function ConjunctionMarker({
 
   return (
     <group>
-      <line geometry={lineGeom} raycast={() => null}>
+      <threeLine geometry={lineGeom} raycast={() => null}>
         <lineBasicMaterial color={color} transparent opacity={0.95} />
-      </line>
+      </threeLine>
       <group position={mid}>
         <mesh ref={haloRef}>
           <ringGeometry args={[0.038, 0.05, 48]} />
@@ -276,12 +276,12 @@ export function ReferenceGrid({ visible = true }: { visible?: boolean }) {
 
   return (
     <group>
-      <line geometry={equator} raycast={() => null}>
+      <threeLine geometry={equator} raycast={() => null}>
         <lineBasicMaterial color="#2dd4bf" transparent opacity={0.16} />
-      </line>
-      <line geometry={axis} raycast={() => null}>
+      </threeLine>
+      <threeLine geometry={axis} raycast={() => null}>
         <lineBasicMaterial color="#2dd4bf" transparent opacity={0.13} />
-      </line>
+      </threeLine>
     </group>
   );
 }
@@ -314,9 +314,9 @@ export function RegimeShells({ visible = false }: { visible?: boolean }) {
   return (
     <group>
       {rings.map((r, i) => (
-        <line key={i} geometry={r.geom} raycast={() => null}>
+        <threeLine key={i} geometry={r.geom} raycast={() => null}>
           <lineBasicMaterial color={r.color} transparent opacity={0.12} />
-        </line>
+        </threeLine>
       ))}
     </group>
   );

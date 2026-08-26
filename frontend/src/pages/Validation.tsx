@@ -9,7 +9,7 @@
  * system that cannot describe its own error budget is the one to distrust.
  */
 import { useState } from "react";
-import { fmt, fmtAge, fmtInt, fmtSci } from "../api/client";
+import { fmt, fmtAge, fmtInt } from "../api/client";
 import { useDebug, useValidation } from "../hooks/useKaksha";
 
 function Panel({

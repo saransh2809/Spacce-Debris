@@ -1,0 +1,41 @@
+# Render blueprint for the KAKSHA backend.
+#
+# WHY NOT VERCEL FOR THIS SERVICE
+# -------------------------------
+# The backend is a stateful, long-running process. It holds ~18,700 element
+# sets and their pre-built SGP4 Satrec objects in memory (about 240 MB), warms
+# that catalogue in a background task at startup, refreshes it on a timer, and
+# caches screening runs between requests. A serverless function has none of
+# those properties: it would rebuild the catalogue on every cold start, exceed
+# the function time limit doing it, and cannot write the disk cache. So the
+# frontend goes to Vercel and the API goes here.
+#
+# Deploy: Render dashboard -> New -> Blueprint -> point at this repository.
+services:
+  - type: web
+    name: kaksha-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      # Set this to your Vercel production domain. Preview deployments are
+      # already matched by the *.vercel.app regex in app/core/config.py.
+      - key: KAKSHA_CORS_ORIGINS
+        sync: false
+      # Optional: enables generated explanations. Without it the explanation
+      # panel serves the deterministic template, which is a supported mode.
+      - key: KAKSHA_GEMINI_API_KEY
+        sync: false
+      - key: KAKSHA_LLM_MODEL
+        value: gemini-2.5-flash
+      # The free tier gives 512 MB. The full catalogue plus a screening run
+      # fits, but not with much headroom -- lower this if the service is
+      # OOM-killed. Screening always uses the whole catalogue it was given;
+      # this bounds what gets loaded, and the Validation page reports it.
+      - key: KAKSHA_MAX_SCREEN_OBJECTS
+        value: "4000"

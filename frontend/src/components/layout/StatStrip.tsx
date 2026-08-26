@@ -6,7 +6,7 @@
  * conjunctions, the tile reads zero. A dashboard that always shows an
  * impressive number is showing a decoration, not a measurement.
  */
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   fmt,
   fmtAge,

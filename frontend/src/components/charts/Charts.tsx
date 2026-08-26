@@ -221,7 +221,9 @@ export function ProfileChart({
 }) {
   const [cursor, setCursor] = useState<number | null>(null);
 
-  const { sepPath, ratePath, tMin, tMax, sepMax, rateAbs } = useMemo(() => {
+  // sepMax and rateAbs are scale factors used only inside the memo to build
+  // the paths; they are returned for clarity but nothing out here reads them.
+  const { sepPath, ratePath, tMin, tMax } = useMemo(() => {
     const ts = tOffsetS.filter((t): t is number => t !== null);
     const seps = separationKm.filter((s): s is number => s !== null);
     const rates = rangeRateKmS.filter((r): r is number => r !== null);

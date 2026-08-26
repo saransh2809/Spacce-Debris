@@ -10,9 +10,10 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
@@ -29,7 +30,20 @@ class Settings(BaseSettings):
     app_subtitle: str = "Space Situational Awareness"
     version: str = "1.0.0"
     debug: bool = True
-    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    # Browser origins allowed to call this API.  Set KAKSHA_CORS_ORIGINS to a
+    # comma-separated list when deploying, e.g.
+    #     KAKSHA_CORS_ORIGINS=https://kaksha.vercel.app,http://localhost:5173
+    # NoDecode keeps pydantic-settings from JSON-parsing the env var before
+    # the validator below sees it; without it a comma-separated value raises
+    # during source loading rather than reaching _split_origins.
+    cors_origins: Annotated[list[str], NoDecode] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+    # Vercel gives every preview deployment its own hostname, so the allowlist
+    # cannot be enumerated ahead of time.  This regex admits that family of
+    # origins without opening the API to everyone.  Set to "" to disable.
+    cors_origin_regex: str = r"https://[a-z0-9-]+\.vercel\.app"
 
     # ------------------------------------------------------------ orbital data
     # Celestrak GP (General Perturbations) API -- public, no credentials.
@@ -121,6 +135,25 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 1200
     llm_enabled: bool = True
 
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _split_origins(cls, v):
+        """
+        Accept a comma-separated list as well as JSON.
+
+        pydantic-settings parses a `list[str]` env var as JSON, so
+        KAKSHA_CORS_ORIGINS=https://a.com,https://b.com would raise rather than
+        work. Hosting dashboards make people type plain comma-separated values,
+        and a deploy failing on env-var quoting is a miserable way to lose an
+        afternoon.
+        """
+        if isinstance(v, str):
+            s = v.strip()
+            if s.startswith("["):
+                return v          # genuine JSON; let pydantic handle it
+            return [part.strip() for part in s.split(",") if part.strip()]
+        return v
+
     @property
     def llm_api_key(self) -> str:
         """
@@ -150,7 +183,20 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     s = Settings()
-    s.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    # The element-set cache is a speed optimisation, never a correctness one --
+    # a cache miss re-fetches from CelesTrak. Container and serverless hosts
+    # often mount the application directory read-only, so failing to create it
+    # must not stop the service from starting. Fall back to the system temp
+    # directory and carry on.
+    try:
+        s.cache_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        import tempfile
+
+        s.cache_dir = Path(tempfile.gettempdir()) / "kaksha_cache"
+        s.cache_dir.mkdir(parents=True, exist_ok=True)
+
     if abs(s.risk_weights_sum - 1.0) > 1e-9:
         raise ValueError(
             f"Risk engine weights must sum to 1.0, got {s.risk_weights_sum}"
