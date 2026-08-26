@@ -23,7 +23,7 @@ import {
 } from "../../hooks/useKaksha";
 import { useStore } from "../../store/useStore";
 import { BPlaneView } from "../bplane/BPlaneView";
-import { ExplanationPanel } from "./ExplanationPanel";
+import { AiExplanationCard, ExplanationPanel } from "./ExplanationPanel";
 import type { ConjunctionDetail, ObjectResponse } from "../../api/types";
 
 function Row({
@@ -530,6 +530,14 @@ function ConjunctionView({ detail }: { detail: ConjunctionDetail }) {
             <div className="note" style={{ marginTop: 6 }}>
               {detail.validation.summary}
             </div>
+
+            {/* The explanation belongs in the default view, not behind a tab.
+                It is the last stage of the pipeline and the first thing a
+                non-specialist reads. */}
+            <AiExplanationCard
+              eventId={detail.event_id}
+              onOpenFull={() => setTab("EXPLAIN")}
+            />
           </>
         )}
 

@@ -9,26 +9,179 @@
  * figures visible in the other tabs. The explanation is never allowed to become
  * the authoritative version of a value.
  */
-import { useMutation } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { useScreenParams } from "../../hooks/useKaksha";
 import type { ExplainResponse } from "../../api/types";
 
-export function ExplanationPanel({ eventId }: { eventId: string }) {
+/**
+ * One explanation per event, shared by every component that shows it.
+ *
+ * This was a mutation fired from an effect, which meant the summary card and
+ * the full panel each triggered their own generation, and every tab switch
+ * paid for another one. As a cached query the model is called once per event
+ * and both views read the same result.
+ */
+export function useExplanation(eventId: string) {
   const params = useScreenParams();
-
-  const mutation = useMutation<ExplainResponse, Error>({
-    mutationFn: () => api.explain(eventId, params),
+  return useQuery<ExplainResponse, Error>({
+    queryKey: ["explain", eventId],
+    queryFn: () => api.explain(eventId, params),
+    // The explanation describes a fixed, validated result: it does not go stale
+    // while the event is on screen.
+    staleTime: Infinity,
+    gcTime: 30 * 60_000,
+    retry: 1,
   });
+}
 
-  // Generate once per event, automatically.
-  useEffect(() => {
-    mutation.mutate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventId]);
+/**
+ * The prominent AI EXPLANATION card.
+ *
+ * Sits in the default view of a selected conjunction rather than behind a tab,
+ * because an explanation nobody finds is not an explanation. It shows the
+ * narrative summary and the audit verdict; the full breakdown, including which
+ * numerals were traced, stays in the dedicated panel.
+ */
+export function AiExplanationCard({
+  eventId,
+  onOpenFull,
+}: {
+  eventId: string;
+  onOpenFull?: () => void;
+}) {
+  const { data, isPending, isError, error } = useExplanation(eventId);
 
-  const data = mutation.data;
+  // The generated text is sectioned; the SUMMARY section is the part that
+  // belongs in a card this size.
+  const summary = (() => {
+    if (!data) return "";
+    const text = data.explanation;
+    const start = text.indexOf("SUMMARY");
+    if (start < 0) return text.slice(0, 420);
+    const body = text.slice(start + "SUMMARY".length);
+    const next = body.search(
+      new RegExp("\\n(WHY THIS RANKING|UNCERTAINTY|WHAT THIS DOES NOT MEAN)"),
+    );
+    return (next > 0 ? body.slice(0, next) : body).trim();
+  })();
+
+  return (
+    <div
+      style={{
+        marginTop: 14,
+        border: "1px solid var(--teal-line, rgba(45,212,191,0.32))",
+        borderLeft: "2px solid var(--teal)",
+        borderRadius: 3,
+        background: "rgba(45,212,191,0.045)",
+        padding: "10px 12px",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+          marginBottom: 7,
+        }}
+      >
+        <span className="label" style={{ color: "var(--teal)" }}>
+          &#10022; AI Explanation
+        </span>
+        {data && (
+          <span
+            className="mono"
+            style={{
+              fontSize: 9,
+              color: data.verified ? "var(--ok)" : "var(--bad)",
+              whiteSpace: "nowrap",
+            }}
+            title={
+              data.verified
+                ? "Every numeral in this text was traced back to a pipeline value"
+                : "One or more numerals could not be traced to a pipeline value"
+            }
+          >
+            {data.verified ? "✓ AUDIT PASSED" : "⚠ AUDIT FAILED"}
+          </span>
+        )}
+      </div>
+
+      {isPending && (
+        <div style={{ display: "grid", gap: 6 }}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={i}
+              className="skeleton"
+              style={{ height: 10, width: `${76 + ((i * 11) % 20)}%` }}
+            />
+          ))}
+        </div>
+      )}
+
+      {isError && (
+        <div className="note">
+          Explanation unavailable ({error.message}). The numerical panels above
+          remain authoritative.
+        </div>
+      )}
+
+      {data && (
+        <>
+          <div
+            style={{
+              fontSize: "var(--fs-small)",
+              lineHeight: 1.62,
+              color: "var(--text)",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {summary}
+          </div>
+
+          <div
+            style={{
+              marginTop: 9,
+              paddingTop: 7,
+              borderTop: "1px solid var(--line-faint)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+            }}
+          >
+            <span className="note" style={{ margin: 0 }}>
+              AI interpretation &middot; based on validated numerical results
+            </span>
+            {onOpenFull && (
+              <button
+                className="btn"
+                style={{ padding: "3px 8px", fontSize: 9, flexShrink: 0 }}
+                onClick={onOpenFull}
+              >
+                Full explanation
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export function ExplanationPanel({ eventId }: { eventId: string }) {
+  const queryClient = useQueryClient();
+  const query = useExplanation(eventId);
+  const mutation = {
+    isPending: query.isPending || query.isFetching,
+    isError: query.isError,
+    error: query.error as Error,
+    mutate: () =>
+      queryClient.invalidateQueries({ queryKey: ["explain", eventId] }),
+  };
+
+  const data = query.data;
 
   return (
     <div>

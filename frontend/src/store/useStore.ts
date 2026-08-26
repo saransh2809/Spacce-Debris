@@ -70,6 +70,28 @@ interface KakshaState {
   toggleFocusIndia: () => void;
   followSelected: boolean;
   setFollowSelected: (v: boolean) => void;
+
+  /**
+   * Side-panel visibility. Independent, so all four combinations are reachable
+   * and the centre viewport reclaims whatever space is freed.
+   */
+  leftPanelOpen: boolean;
+  rightPanelOpen: boolean;
+  toggleLeftPanel: () => void;
+  toggleRightPanel: () => void;
+
+  /**
+   * Whether the 3D globe is mounted.
+   *
+   * The dashboard opens on a summary view; the globe is revealed on demand.
+   * This flag controls MOUNTING, and everything the globe depends on --
+   * simulation time, selection, filters, camera intent -- lives elsewhere in
+   * this store, so hiding and re-showing it restores the same scene rather
+   * than resetting the session.
+   */
+  globeVisible: boolean;
+  setGlobeVisible: (v: boolean) => void;
+  toggleGlobe: () => void;
   /** Idle camera drift, so the globe is visibly turning without user input. */
   autoRotate: boolean;
   setAutoRotate: (v: boolean) => void;
@@ -176,6 +198,15 @@ export const useStore = create<KakshaState>((set, get) => ({
     })),
   followSelected: false,
   setFollowSelected: (v) => set({ followSelected: v }),
+
+  leftPanelOpen: true,
+  rightPanelOpen: true,
+  toggleLeftPanel: () => set((s) => ({ leftPanelOpen: !s.leftPanelOpen })),
+  toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
+
+  globeVisible: false,
+  setGlobeVisible: (v) => set({ globeVisible: v }),
+  toggleGlobe: () => set((s) => ({ globeVisible: !s.globeVisible })),
   autoRotate: true,
   setAutoRotate: (v) => set({ autoRotate: v }),
   toggleAutoRotate: () => set((s) => ({ autoRotate: !s.autoRotate })),

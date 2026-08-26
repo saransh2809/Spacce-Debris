@@ -130,6 +130,26 @@ class ScreeningService:
         if entry is not None and entry.is_fresh(self._generation):
             return entry.run, True
 
+        # A miss here costs ~40 s of CPU, so record WHY it missed. Without this
+        # a cache that silently never hits is indistinguishable from one that
+        # works, and the only symptom is a slow dashboard.
+        log_event(
+            log,
+            STAGE_CONJUNCTION,
+            "cache_miss",
+            key=key,
+            reason=(
+                "absent"
+                if entry is None
+                else f"stale age={entry.age_seconds():.0f}s"
+                if entry.age_seconds() >= CACHE_TTL_SECONDS
+                else f"generation {entry.catalog_generation} != {self._generation}"
+            ),
+            primaries=len(primaries),
+            anchor=start.isoformat(),
+            entries_held=len(self._entries),
+        )
+
         async with self._lock:
             entry = self._entries.get(key)
             if entry is not None and entry.is_fresh(self._generation):

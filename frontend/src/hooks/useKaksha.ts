@@ -56,6 +56,32 @@ export function useQuantisedTime(stepMs: number): string {
   return value;
 }
 
+/**
+ * WALL-clock time quantised to `stepMs`, as an ISO string.
+ *
+ * The sibling of useQuantisedTime, for the cases that must NOT follow the
+ * simulation clock -- principally the conjunction screening anchor, where
+ * tracking the simulation would restart a 40-second computation on every
+ * scrub.
+ */
+export function useWallQuantisedTime(stepMs: number): string {
+  const quantise = () =>
+    new Date(Math.floor(Date.now() / stepMs) * stepMs).toISOString();
+  const [value, setValue] = useState(quantise);
+
+  useEffect(() => {
+    setValue(quantise());
+    const id = window.setInterval(
+      () => setValue(quantise()),
+      Math.max(1000, stepMs / 10),
+    );
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stepMs]);
+
+  return value;
+}
+
 export function useHealth() {
   return useQuery({
     queryKey: ["health"],
@@ -155,14 +181,53 @@ export function useOrbit(noradId: number | null, revolutions = 1) {
   });
 }
 
-/** Screening parameters shared by every conjunction query. */
+/**
+ * Screening parameters shared by every conjunction query.
+ *
+ * WHY THE SCREENING ANCHOR IS NOT THE SIMULATION CLOCK
+ * ----------------------------------------------------
+ * A screening run looks 48 hours ahead of its anchor. Tying that anchor to the
+ * simulation clock meant every scrub, every +10M, every +24H produced a new
+ * anchor, a new server cache key, and a fresh ~17-second screen -- for a window
+ * that still contained exactly the same encounters. That was the dominant cost
+ * of a time jump, and it bought nothing: an event 6 hours away is in the
+ * 48-hour window whether you view it from now or from now+1h.
+ *
+ * So the anchor is wall-clock time, quantised to 10 minutes to land on the
+ * server's cache bucket (CACHE_TTL_SECONDS = 600). Scrubbing the simulation
+ * clock now re-propagates positions -- which is cheap and is what the user
+ * actually wants to see -- without re-screening.
+ *
+ * The anchor DOES move when the simulation time leaves the screened window,
+ * because then the displayed events genuinely no longer cover what is on
+ * screen. That is the one case where a re-screen is the correct answer rather
+ * than wasted work.
+ */
 export function useScreenParams() {
   const countries = useStore((s) => s.countries);
   const windowHours = useStore((s) => s.windowHours);
   const thresholdKm = useStore((s) => s.thresholdKm);
-  // Screening runs are cached server-side for 10 minutes; quantising the
-  // client's `at` to 5 minutes keeps requests landing on the same cache entry.
-  const at = useQuantisedTime(300_000);
+  const simNow = useStore((s) => s.simNow);
+  const clockEpoch = useStore((s) => s.clockEpoch);
+
+  // WALL clock, on the server's 10-minute bucket -- deliberately NOT
+  // useQuantisedTime, which quantises SIMULATION time and therefore moves with
+  // every jump. That distinction is the whole point of this hook: using the
+  // simulation clock here is what made a +1h jump start a fresh 40-second
+  // screening run.
+  const wallAnchor = useWallQuantisedTime(600_000);
+
+  // Re-anchor only if the simulation has moved outside the screened window.
+  const at = useMemo(() => {
+    const wall = new Date(wallAnchor).getTime();
+    const sim = simNow().getTime();
+    const windowMs = windowHours * 3600_000;
+    if (sim >= wall && sim <= wall + windowMs) return wallAnchor;
+    // Outside the window: anchor on the simulation time instead, quantised to
+    // the same bucket so it still hits the server cache.
+    return new Date(Math.floor(sim / 600_000) * 600_000).toISOString();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallAnchor, windowHours, clockEpoch]);
 
   return useMemo(
     () => ({
@@ -314,11 +379,24 @@ export function useClockControls() {
   const apply = async (fn: () => Promise<Parameters<typeof syncClock>[0]>) => {
     const state = await fn();
     syncClock(state);
-    // Time-dependent queries must not serve results computed for a different
-    // instant, so drop them rather than showing a stale frame.
-    await queryClient.invalidateQueries({ queryKey: ["scene"] });
-    await queryClient.invalidateQueries({ queryKey: ["environment"] });
-    await queryClient.invalidateQueries({ queryKey: ["object"] });
+
+    // Mark time-dependent queries stale WITHOUT awaiting their refetch.
+    //
+    // This used to be three sequential `await invalidateQueries(...)` calls.
+    // invalidateQueries resolves only once the triggered refetches settle, so
+    // the caller was held for as long as the slowest one took. A jump to +24 h
+    // shifts the screening window, which can cost a cold 17-second run, and
+    // the transport controls stayed disabled for the whole of it -- the
+    // "frozen UI" symptom. The clock mutation itself is a few milliseconds;
+    // only that needs awaiting.
+    //
+    // `refetchType: "active"` still refreshes what is on screen, but we let it
+    // happen in the background while the interface stays live. Each query
+    // already carries `placeholderData: (prev) => prev`, so the previous frame
+    // remains visible instead of blanking.
+    void queryClient.invalidateQueries({ queryKey: ["scene"] });
+    void queryClient.invalidateQueries({ queryKey: ["environment"] });
+    void queryClient.invalidateQueries({ queryKey: ["object"] });
     return state;
   };
 

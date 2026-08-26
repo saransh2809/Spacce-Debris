@@ -264,31 +264,54 @@ export function Satellites({
 }: SatellitesProps) {
   const sprites = getSprites();
 
-  // Partition the catalogue into per-class buffers. Recomputed only when the
-  // payload or the emphasis changes -- not per frame.
-  const layers = useMemo(() => {
-    const empty = LAYERS.map(() => ({
-      positions: [] as number[],
-      colors: [] as number[],
-      sizes: [] as number[],
-      norads: [] as number[],
+  /**
+   * Partition the catalogue into per-class typed-array buffers.
+   *
+   * COUNT, ALLOCATE, FILL -- in that order, deliberately.
+   *
+   * This previously pushed into plain JS arrays and then copied each one into a
+   * Float32Array, which is two passes over the catalogue plus a large amount of
+   * short-lived garbage on every payload. On a time jump that showed up as a
+   * ~150 ms main-thread block, measured with PerformanceObserver longtask
+   * entries. Counting first lets every buffer be allocated at its exact final
+   * size and written once, with no intermediate arrays and nothing for the
+   * collector to clean up.
+   *
+   * Recomputed only when the payload or the emphasis changes -- never per frame.
+   */
+  const typed = useMemo(() => {
+    const n = scene?.count ?? 0;
+    const counts = new Int32Array(LAYERS.length);
+
+    if (scene && n > 0) {
+      for (let i = 0; i < n; i++) {
+        counts[LAYER_OF_TYPE[scene.type_codes[i] ?? 5] ?? 3]++;
+      }
+    }
+
+    const buffers = LAYERS.map((_, layer) => ({
+      positions: new Float32Array(counts[layer] * 3),
+      colors: new Float32Array(counts[layer] * 3),
+      sizes: new Float32Array(counts[layer]),
+      norads: new Int32Array(counts[layer]),
     }));
 
-    if (!scene || scene.count === 0) return empty;
+    if (!scene || n === 0) return buffers;
 
+    const cursor = new Int32Array(LAYERS.length);
     const src = scene.positions_km;
-    for (let i = 0; i < scene.count; i++) {
+
+    for (let i = 0; i < n; i++) {
       const typeCode = scene.type_codes[i] ?? 5;
       const norad = scene.norad_ids[i];
-      const layerIndex = LAYER_OF_TYPE[typeCode] ?? 3;
-      const bucket = empty[layerIndex];
+      const layer = LAYER_OF_TYPE[typeCode] ?? 3;
+      const b = buffers[layer];
+      const k = cursor[layer]++;
 
       // TEME (x, y, z) -> scene (x, z, -y). Same relabelling as Earth.tsx.
-      bucket.positions.push(
-        src[i * 3] / KM_PER_UNIT,
-        src[i * 3 + 2] / KM_PER_UNIT,
-        -src[i * 3 + 1] / KM_PER_UNIT,
-      );
+      b.positions[k * 3] = src[i * 3] / KM_PER_UNIT;
+      b.positions[k * 3 + 1] = src[i * 3 + 2] / KM_PER_UNIT;
+      b.positions[k * 3 + 2] = -src[i * 3 + 1] / KM_PER_UNIT;
 
       let color = TYPE_COLORS[typeCode] ?? TYPE_COLORS[5];
       let size = 1;
@@ -304,24 +327,15 @@ export function Satellites({
         size = 1.35;
       }
 
-      bucket.colors.push(color.r, color.g, color.b);
-      bucket.sizes.push(size);
-      bucket.norads.push(norad);
+      b.colors[k * 3] = color.r;
+      b.colors[k * 3 + 1] = color.g;
+      b.colors[k * 3 + 2] = color.b;
+      b.sizes[k] = size;
+      b.norads[k] = norad;
     }
 
-    return empty;
+    return buffers;
   }, [scene, highlighted, selectedNorad, emphasiseIndia]);
-
-  const typed = useMemo(
-    () =>
-      layers.map((b) => ({
-        positions: new Float32Array(b.positions),
-        colors: new Float32Array(b.colors),
-        sizes: new Float32Array(b.sizes),
-        norads: Int32Array.from(b.norads),
-      })),
-    [layers],
-  );
 
   if (!scene || scene.count === 0) return null;
 

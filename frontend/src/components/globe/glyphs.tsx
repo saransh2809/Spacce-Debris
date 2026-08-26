@@ -114,7 +114,58 @@ export function DotGlyph({ size = 14, color, title }: GlyphProps) {
   );
 }
 
-export type GlyphKind = "satellite" | "station" | "rocket" | "debris" | "dot";
+/**
+ * An orbital path: an inclined ellipse with a body on it. Represents the
+ * trajectory layer rather than any single object class.
+ */
+function OrbitGlyph({ size = 14, color, title }: GlyphProps) {
+  return (
+    <svg {...frame(size, color, title)}>
+      <ellipse
+        cx="24"
+        cy="24"
+        rx="20"
+        ry="9"
+        transform="rotate(-24 24 24)"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.6"
+        opacity="0.85"
+      />
+      <circle cx="38" cy="16" r="4" fill="currentColor" />
+    </svg>
+  );
+}
+
+/**
+ * A conjunction: two bodies converging on a common point. The crossing tracks
+ * say "close approach" without implying contact.
+ */
+function ConjunctionGlyph({ size = 14, color, title }: GlyphProps) {
+  return (
+    <svg {...frame(size, color, title)}>
+      <path
+        d="M5 8 L24 24 M43 8 L24 24"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        opacity="0.55"
+        strokeLinecap="round"
+      />
+      <circle cx="24" cy="24" r="12" fill="currentColor" opacity="0.16" />
+      <circle cx="18" cy="21" r="4.2" fill="currentColor" />
+      <circle cx="30" cy="27" r="4.2" fill="currentColor" />
+    </svg>
+  );
+}
+
+export type GlyphKind =
+  | "satellite"
+  | "station"
+  | "rocket"
+  | "debris"
+  | "orbit"
+  | "conjunction"
+  | "dot";
 
 export function Glyph({ kind, ...rest }: GlyphProps & { kind: GlyphKind }) {
   switch (kind) {
@@ -126,6 +177,10 @@ export function Glyph({ kind, ...rest }: GlyphProps & { kind: GlyphKind }) {
       return <RocketGlyph {...rest} />;
     case "debris":
       return <DebrisGlyph {...rest} />;
+    case "orbit":
+      return <OrbitGlyph {...rest} />;
+    case "conjunction":
+      return <ConjunctionGlyph {...rest} />;
     default:
       return <DotGlyph {...rest} />;
   }
