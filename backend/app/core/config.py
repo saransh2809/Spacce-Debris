@@ -40,10 +40,25 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
-    # Vercel gives every preview deployment its own hostname, so the allowlist
-    # cannot be enumerated ahead of time.  This regex admits that family of
-    # origins without opening the API to everyone.  Set to "" to disable.
-    cors_origin_regex: str = r"https://[a-z0-9-]+\.vercel\.app"
+    # Two families of origin cannot be enumerated ahead of time:
+    #
+    #   Vercel previews  -- every deployment gets its own hostname.
+    #   Local dev ports  -- Vite falls back to 5174, 5175, ... whenever 5173 is
+    #                       already taken, and the only symptom is that every
+    #                       request fails CORS preflight with an opaque 400.
+    #                       Pinning a single port turns a routine port clash
+    #                       into a dead application.
+    #
+    # Allowing any localhost port is safe here specifically because this API
+    # has no authentication, no cookies and no per-user data: it serves public
+    # orbital elements. There is nothing for a hostile local page to obtain
+    # that it could not fetch from CelesTrak directly.
+    #
+    # Set to "" to disable both.
+    cors_origin_regex: str = (
+        r"https://[a-z0-9-]+\.vercel\.app"
+        r"|http://(localhost|127\.0\.0\.1)(:\d+)?"
+    )
 
     # ------------------------------------------------------------ orbital data
     # Celestrak GP (General Perturbations) API -- public, no credentials.
