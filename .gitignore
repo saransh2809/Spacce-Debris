@@ -23,3 +23,5 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# PDF build tooling (installed on demand, not a runtime dependency)
