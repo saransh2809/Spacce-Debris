@@ -18,7 +18,7 @@
  */
 import { useIsFetching } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { GlobeScene } from "../components/globe/GlobeScene";
+import { GlobeViewport } from "../components/globe/GlobeViewport";
 import { Glyph, type GlyphKind } from "../components/globe/glyphs";
 import { LeftRail } from "../components/panels/LeftRail";
 import { RightRail } from "../components/panels/RightRail";
@@ -482,7 +482,7 @@ export function Dashboard() {
         >
           {globeVisible ? (
             <>
-              <GlobeScene />
+              <GlobeViewport onClose={() => setGlobeVisible(false)} />
               <DisplayFilters />
               <PipelineBadge />
               <button

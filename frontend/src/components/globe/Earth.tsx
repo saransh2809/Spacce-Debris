@@ -28,8 +28,8 @@
  * shows through. The blend width approximates civil twilight rather than being
  * a hard line, because the real terminator is not a hard line.
  */
-import { useLoader, useFrame } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
 export const EARTH_RADIUS_KM = 6378.137;
@@ -165,6 +165,129 @@ void main() {
 }
 `;
 
+/**
+ * Load the Earth maps resiliently, and progressively.
+ *
+ * This replaced `useLoader(TextureLoader, [five urls])`. That call suspends
+ * until ALL five decode, and -- with no error boundary above it -- a single
+ * failed or slow texture took down the entire application rather than the one
+ * map that failed. It also meant nothing at all was drawn until the last byte
+ * of the last texture arrived.
+ *
+ * Here every map starts as a neutral 1x1 placeholder, so the sphere, the
+ * lighting and the terminator are correct from the first frame. Each real
+ * texture swaps in as it arrives, and a failure is confined to its own map:
+ * a missing specular texture costs the ocean sheen, not the planet.
+ */
+function makePlaceholder(r: number, g: number, b: number): THREE.DataTexture {
+  const tex = new THREE.DataTexture(
+    new Uint8Array([r, g, b, 255]),
+    1,
+    1,
+    THREE.RGBAFormat,
+  );
+  tex.needsUpdate = true;
+  return tex;
+}
+
+interface EarthTextures {
+  dayMap: THREE.Texture;
+  nightMap: THREE.Texture;
+  cloudMap: THREE.Texture;
+  normalMap: THREE.Texture;
+  specMap: THREE.Texture;
+  loaded: number;
+  total: number;
+  failed: string[];
+}
+
+function useEarthTextures(): EarthTextures {
+  // Placeholders chosen so a not-yet-loaded map is neutral rather than wrong:
+  // a mid-blue ocean, black night side, no cloud, flat normal, no specular.
+  const placeholders = useMemo(
+    () => ({
+      dayMap: makePlaceholder(24, 44, 74),
+      nightMap: makePlaceholder(0, 0, 0),
+      cloudMap: makePlaceholder(0, 0, 0),
+      normalMap: makePlaceholder(128, 128, 255),
+      specMap: makePlaceholder(0, 0, 0),
+    }),
+    [],
+  );
+
+  const [state, setState] = useState<EarthTextures>(() => ({
+    ...placeholders,
+    loaded: 0,
+    total: 5,
+    failed: [],
+  }));
+
+  useEffect(() => {
+    const loader = new THREE.TextureLoader();
+    let cancelled = false;
+    const created: THREE.Texture[] = [];
+
+    const jobs: {
+      key: keyof typeof placeholders;
+      url: string;
+      srgb: boolean;
+    }[] = [
+      { key: "dayMap", url: "/textures/earth_atmos_2048.jpg", srgb: true },
+      { key: "nightMap", url: "/textures/earth_lights_2048.png", srgb: true },
+      { key: "cloudMap", url: "/textures/earth_clouds_1024.png", srgb: true },
+      // Normal and specular are DATA, not colour. Tagging them sRGB would
+      // gamma-decode them and quietly corrupt both the relief and the ocean
+      // mask.
+      { key: "normalMap", url: "/textures/earth_normal_2048.jpg", srgb: false },
+      { key: "specMap", url: "/textures/earth_specular_2048.jpg", srgb: false },
+    ];
+
+    for (const job of jobs) {
+      loader.load(
+        job.url,
+        (tex) => {
+          if (cancelled) {
+            tex.dispose();
+            return;
+          }
+          if (job.srgb) tex.colorSpace = THREE.SRGBColorSpace;
+          tex.anisotropy = 8;
+          tex.needsUpdate = true;
+          created.push(tex);
+          setState((s) => ({ ...s, [job.key]: tex, loaded: s.loaded + 1 }));
+        },
+        undefined,
+        () => {
+          if (cancelled) return;
+          // Keep the placeholder for this map and carry on. One missing
+          // texture must never cost the whole scene.
+          setState((s) => ({
+            ...s,
+            loaded: s.loaded + 1,
+            failed: [...s.failed, job.url],
+          }));
+        },
+      );
+    }
+
+    return () => {
+      cancelled = true;
+      // Dispose only what THIS mount created. The placeholders are owned by
+      // the memo and are still referenced while the component lives.
+      for (const t of created) t.dispose();
+    };
+  }, [placeholders]);
+
+  // Placeholders outlive every load, so they are released with the component.
+  useEffect(() => {
+    return () => {
+      for (const t of Object.values(placeholders)) t.dispose();
+    };
+  }, [placeholders]);
+
+  return state;
+}
+
 interface EarthProps {
   /** GMST in radians. Drives the mesh rotation. */
   gmst: number;
@@ -186,35 +309,25 @@ export function Earth({
   quality = "high",
   simNowMs,
 }: EarthProps) {
-  const [dayMap, nightMap, cloudMap, normalMap, specMap] = useLoader(THREE.TextureLoader, [
-    "/textures/earth_atmos_2048.jpg",
-    "/textures/earth_lights_2048.png",
-    "/textures/earth_clouds_1024.png",
-    "/textures/earth_normal_2048.jpg",
-    "/textures/earth_specular_2048.jpg",
-  ]);
+  const { dayMap, nightMap, cloudMap, normalMap, specMap } = useEarthTextures();
 
   const earthRef = useRef<THREE.Mesh>(null);
   const cloudRef = useRef<THREE.Mesh>(null);
-
-  // Colour-space handling: the albedo and lights maps are authored in sRGB;
-  // the specular map is data, not colour, and must stay linear or the ocean
-  // mask comes out wrong.
-  useMemo(() => {
-    dayMap.colorSpace = THREE.SRGBColorSpace;
-    nightMap.colorSpace = THREE.SRGBColorSpace;
-    cloudMap.colorSpace = THREE.SRGBColorSpace;
-    for (const t of [dayMap, nightMap, cloudMap, normalMap, specMap]) {
-      t.anisotropy = 8;
-      t.needsUpdate = true;
-    }
-  }, [dayMap, nightMap, cloudMap, normalMap, specMap]);
 
   const sunSceneVec = useMemo(
     () => new THREE.Vector3(...temeToScene(sunTeme[0], sunTeme[1], sunTeme[2])).normalize(),
     [sunTeme],
   );
 
+  /**
+   * Built ONCE and mutated in place.
+   *
+   * The dependency list used to include the texture objects, so every texture
+   * that arrived produced a new uniforms object -- which makes three.js tear
+   * down and recompile the shader program. With progressive loading that is
+   * four needless recompiles during startup, each one a synchronous GPU stall
+   * on exactly the machines least able to absorb it.
+   */
   const earthUniforms = useMemo(
     () => ({
       dayMap: { value: dayMap },
@@ -229,8 +342,18 @@ export function Earth({
       dayBoost: { value: 1.34 },
       ambientFloor: { value: 0.22 },
     }),
-    [dayMap, nightMap, specMap, normalMap],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
+
+  // Swap texture references as they load. Assigning to `.value` rebinds the
+  // sampler without touching the compiled program.
+  useEffect(() => {
+    earthUniforms.dayMap.value = dayMap;
+    earthUniforms.nightMap.value = nightMap;
+    earthUniforms.specMap.value = specMap;
+    earthUniforms.normalMap.value = normalMap;
+  }, [earthUniforms, dayMap, nightMap, specMap, normalMap]);
 
   const atmoUniforms = useMemo(
     () => ({

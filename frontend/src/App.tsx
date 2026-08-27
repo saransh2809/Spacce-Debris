@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { TopBar } from "./components/layout/TopBar";
 import { BootGate } from "./components/layout/BootGate";
+import { RouteBoundary } from "./components/layout/RouteBoundary";
 import { Dashboard } from "./pages/Dashboard";
 import { Tracker } from "./pages/Tracker";
 import { Conjunctions } from "./pages/Conjunctions";
@@ -37,15 +38,18 @@ function Shell() {
     <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
       <TopBar />
       <BootGate>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/tracker" element={<Tracker />} />
-          <Route path="/conjunctions" element={<Conjunctions />} />
-          <Route path="/calculations" element={<Calculations />} />
-          <Route path="/analysis" element={<Analysis />} />
-          <Route path="/simulation" element={<Simulation />} />
-          <Route path="/validation" element={<Validation />} />
-        </Routes>
+        {/* A render error on one page must not blank the whole application. */}
+        <RouteBoundary>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/tracker" element={<Tracker />} />
+            <Route path="/conjunctions" element={<Conjunctions />} />
+            <Route path="/calculations" element={<Calculations />} />
+            <Route path="/analysis" element={<Analysis />} />
+            <Route path="/simulation" element={<Simulation />} />
+            <Route path="/validation" element={<Validation />} />
+          </Routes>
+        </RouteBoundary>
       </BootGate>
     </div>
   );
