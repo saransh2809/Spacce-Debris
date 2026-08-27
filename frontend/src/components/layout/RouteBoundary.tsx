@@ -144,7 +144,7 @@ export function RouteBoundary({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   return (
-    <Boundary routeKey={location.pathname} onHome={() => navigate("/")}>
+    <Boundary routeKey={location.pathname} onHome={() => navigate("/dashboard")}>
       {children}
     </Boundary>
   );

@@ -25,3 +25,9 @@ dist/
 Thumbs.db
 
 # PDF build tooling (installed on demand, not a runtime dependency)
+
+# Landing-page design prototype.
+# Superseded by the shipped implementation in frontend/src/components/landing.
+# Kept on disk as the approved design reference; not committed because its
+# preview/ folder is ~15 MB of screenshots and video of a now-outdated draft.
+kaksha-landing-preview/

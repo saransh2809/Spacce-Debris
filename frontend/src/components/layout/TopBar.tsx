@@ -12,13 +12,13 @@
  * would be the single easiest way to lose credibility with a reviewer who
  * knows the domain.
  */
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import { fmtAge, fmtDateUTC, fmtTimeUTC } from "../../api/client";
 import { useHealth, useTickingTime } from "../../hooks/useKaksha";
 import { useStore } from "../../store/useStore";
 
 const ROUTES = [
-  { path: "/", label: "Dashboard", end: true },
+  { path: "/dashboard", label: "Dashboard", end: true },
   { path: "/tracker", label: "Tracker" },
   { path: "/conjunctions", label: "Conjunctions" },
   { path: "/calculations", label: "Calculations" },
@@ -59,7 +59,10 @@ export function TopBar() {
       }}
     >
       {/* --- identity --- */}
-      <div
+      {/* The wordmark is the way back out to the public landing page. */}
+      <Link
+        to="/"
+        title="KAKSHA home"
         style={{
           width: "var(--rail-left)",
           display: "flex",
@@ -68,6 +71,7 @@ export function TopBar() {
           padding: "0 16px",
           borderRight: "1px solid var(--line)",
           flexShrink: 0,
+          textDecoration: "none",
         }}
       >
         <div
@@ -92,7 +96,7 @@ export function TopBar() {
         >
           Space Situational Awareness
         </div>
-      </div>
+      </Link>
 
       {/* --- routes --- */}
       <nav style={{ display: "flex", alignItems: "stretch", flex: 1, minWidth: 0 }}>

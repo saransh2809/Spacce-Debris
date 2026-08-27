@@ -201,7 +201,13 @@ interface EarthTextures {
   failed: string[];
 }
 
-function useEarthTextures(): EarthTextures {
+/**
+ * Exported so the landing page can reuse exactly these maps rather than
+ * generating its own. Two Earths in one application should not disagree about
+ * what the planet looks like, and the loader's progressive, failure-isolated
+ * behaviour is worth having on both.
+ */
+export function useEarthTextures(): EarthTextures {
   // Placeholders chosen so a not-yet-loaded map is neutral rather than wrong:
   // a mid-blue ocean, black night side, no cloud, flat normal, no specular.
   const placeholders = useMemo(

@@ -1,0 +1,2113 @@
+/* ============================================================================
+   KAKSHA -- landing page styles.
+
+   SCOPING
+   -------
+   Every rule below is scoped under `.kx-landing`, and the design tokens are
+   declared on that class rather than on :root. This matters: the landing page
+   and the operations console share variable names (--text, --line, --panel,
+   --teal, --high ...) with deliberately different values. Declaring the landing
+   tokens globally would silently restyle the entire dashboard.
+
+   For the same reason the three class names that exist in both stylesheets --
+   btn, label and panel -- are prefixed `kx-` here. Scoping alone was not enough
+   for those: the console's rules would still have leaked border-radius and
+   hover states into a design built on hard corners.
+
+   The application shell locks the viewport (`body { overflow: hidden }`, a
+   100vh flex column) because every console page scrolls internally. A landing
+   page must scroll the document instead, so `Landing.tsx` puts
+   `kx-landing-active` on <html> while it is mounted and removes it on unmount.
+   That override is the one rule set here that intentionally reaches outside
+   `.kx-landing`.
+   ========================================================================== */
+
+/* --- document scroll, restored only while the landing page is mounted --- */
+html.kx-landing-active,
+html.kx-landing-active body,
+html.kx-landing-active #root {
+  height: auto;
+  overflow: visible;
+}
+
+html.kx-landing-active body {
+  /* clip, not hidden: keeps position:fixed descendants from widening the
+     layout viewport on mobile without making <body> a scroll container. */
+  overflow-x: clip;
+  background: #02060d;
+}
+
+/* --- the landing surface itself --- */
+.kx-landing {
+  position: relative;
+  color: #e2e8f0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================================================
+   KAKSHA LANDING PROTOTYPE — DESIGN TOKENS
+   The palette is fixed by the KAKSHA brief. Colour is used semantically:
+   cyan = system / nominal, amber-orange-red = escalating risk, slate = chrome.
+   ========================================================================== */
+
+.kx-landing {
+  /* ---- surface ---- */
+  --bg: #02060d;
+  --bg-raise: #050b15;
+  --bg-panel: rgba(8, 17, 28, 0.62);
+  --bg-panel-solid: #071019;
+
+  /* ---- brand ---- */
+  --cyan: #22d3ee;
+  --cyan-dim: #0e7490;
+  --teal: #14b8a6;
+
+  /* ---- type ---- */
+  --text: #e2e8f0;
+  --text-dim: #94a3b8;
+  --text-faint: #64748b;
+
+  /* ---- risk ---- */
+  --moderate: #f59e0b;
+  --high: #f97316;
+  --critical: #ef4444;
+  --info: #60a5fa;
+
+  /* ---- lines ---- */
+  --line: rgba(148, 163, 184, 0.13);
+  --line-strong: rgba(148, 163, 184, 0.22);
+  --line-cyan: rgba(34, 211, 238, 0.26);
+
+  /* ---- type scale ---- */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --eyebrow-size: 0.6875rem;
+  --eyebrow-track: 0.24em;
+
+  /* ---- layout ---- */
+  --gutter: clamp(1.25rem, 4vw, 4.5rem);
+  --max-w: 1360px;
+  --nav-h: 68px;
+
+  /* ---- motion ---- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-io: cubic-bezier(0.65, 0, 0.35, 1);
+}
+@import './tokens.css';
+
+/* ============================================================================
+   RESET
+   ========================================================================== */
+
+/* dropped: * { box-sizing } — the application shell already applies it globally */
+/* dropped: html, body, #root — the application shell owns document-level layout */
+/* dropped: html — the application shell owns document-level layout */
+/* dropped: body — the application shell owns document-level layout */
+.kx-landing h1,
+.kx-landing h2,
+.kx-landing h3,
+.kx-landing h4,
+.kx-landing p,
+.kx-landing figure {
+  margin: 0;
+}
+.kx-landing button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.kx-landing a {
+  color: inherit;
+  text-decoration: none;
+}
+.kx-landing canvas {
+  display: block;
+}
+.kx-landing ::selection {
+  background: rgba(34, 211, 238, 0.28);
+  color: #fff;
+}
+/* Focus is visible and on-brand — this is a keyboard-navigable page. */
+.kx-landing :focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+/* ============================================================================
+   PAGE SHELL — one fixed WebGL stage, content scrolls above it
+   ========================================================================== */
+
+.kx-landing .stage {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none; /* scroll and clicks always reach the content layer */
+}
+.kx-landing .stage canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+.kx-landing .content {
+  position: relative;
+  z-index: 1;
+}
+.kx-landing .section {
+  position: relative;
+  padding-block: clamp(5rem, 12vh, 9rem);
+}
+.kx-landing .shell {
+  width: 100%;
+  max-width: var(--max-w);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+.kx-landing .rule {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(34, 211, 238, 0.18) 18%,
+    rgba(148, 163, 184, 0.14) 50%,
+    rgba(34, 211, 238, 0.1) 82%,
+    transparent
+  );
+}
+/* ============================================================================
+   TYPOGRAPHY PRIMITIVES
+   ========================================================================== */
+
+.kx-landing .eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--eyebrow-size);
+  font-weight: 500;
+  letter-spacing: var(--eyebrow-track);
+  text-transform: uppercase;
+  color: var(--cyan);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+}
+.kx-landing .eyebrow--dim {
+  color: var(--text-faint);
+}
+.kx-landing .eyebrow::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  background: currentColor;
+  border-radius: 50%;
+  flex: none;
+}
+.kx-landing .eyebrow--bare::before {
+  display: none;
+}
+.kx-landing .h-display {
+  font-size: clamp(2.75rem, 7.2vw, 5.6rem);
+  line-height: 0.96;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  text-transform: uppercase;
+}
+.kx-landing .h-section {
+  font-size: clamp(1.9rem, 3.6vw, 3rem);
+  line-height: 1.08;
+  font-weight: 600;
+  letter-spacing: -0.028em;
+}
+.kx-landing .h-sub {
+  font-size: clamp(1.1rem, 1.7vw, 1.35rem);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.kx-landing .lede {
+  color: var(--text-dim);
+  font-size: clamp(0.95rem, 1.1vw, 1.0625rem);
+  line-height: 1.72;
+  max-width: 44ch;
+  font-weight: 350;
+}
+.kx-landing .kx-label {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.kx-landing .readout {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: -0.01em;
+}
+.kx-landing .accent {
+  color: var(--cyan);
+}
+/* ============================================================================
+   BUTTONS
+   ========================================================================== */
+
+.kx-landing .kx-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8125rem 1.375rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.015);
+  transition: border-color 0.4s var(--ease-out), background 0.4s var(--ease-out),
+    color 0.4s var(--ease-out), transform 0.4s var(--ease-out);
+  white-space: nowrap;
+}
+.kx-landing .kx-btn:hover {
+  border-color: var(--line-cyan);
+  background: rgba(34, 211, 238, 0.06);
+  color: #fff;
+}
+.kx-landing .kx-btn:active {
+  transform: translateY(1px);
+}
+.kx-landing .kx-btn__arrow {
+  transition: transform 0.4s var(--ease-out);
+}
+.kx-landing .kx-btn:hover .kx-btn__arrow {
+  transform: translateX(4px);
+}
+.kx-landing .kx-btn--primary {
+  background: linear-gradient(180deg, #2ee0f2 0%, #12b8cf 100%);
+  border-color: transparent;
+  color: #01121a;
+  font-weight: 700;
+}
+.kx-landing .kx-btn--primary:hover {
+  background: linear-gradient(180deg, #55e9f8 0%, #1cc6dd 100%);
+  color: #01121a;
+  box-shadow: 0 0 32px -8px rgba(34, 211, 238, 0.55);
+}
+.kx-landing .kx-btn--ghost {
+  border-color: var(--line);
+  color: var(--text-dim);
+}
+.kx-landing .kx-btn--ghost:hover {
+  color: var(--text);
+}
+/* ============================================================================
+   PANELS
+   ========================================================================== */
+
+.kx-landing .kx-panel {
+  position: relative;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(16px) saturate(120%);
+  -webkit-backdrop-filter: blur(16px) saturate(120%);
+}
+/* Corner ticks — an aerospace-instrument cue, cheaper than a heavy glass frame. */
+.kx-landing .kx-panel--ticked::before,
+.kx-landing .kx-panel--ticked::after {
+  content: '';
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-color: var(--line-cyan);
+  border-style: solid;
+  pointer-events: none;
+}
+.kx-landing .kx-panel--ticked::before {
+  top: -1px;
+  left: -1px;
+  border-width: 1px 0 0 1px;
+}
+.kx-landing .kx-panel--ticked::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 1px 1px 0;
+}
+/* ============================================================================
+   DEMO-DATA MARKING  (spec 14 — prototype values must never read as live)
+   ========================================================================== */
+
+/* Provenance: teal when the figure came from the engine, amber when it is a
+   representative stand-in. Colour carries the meaning, as everywhere else. */
+.kx-landing .provenance {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--moderate);
+  border: 1px solid rgba(245, 158, 11, 0.34);
+  background: rgba(245, 158, 11, 0.07);
+  padding: 0.2em 0.5em;
+  white-space: nowrap;
+}
+
+.kx-landing .provenance.is-live {
+  color: var(--teal);
+  border-color: rgba(20, 184, 166, 0.34);
+  background: rgba(20, 184, 166, 0.07);
+}
+.kx-landing .provenance__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+/* ============================================================================
+   UTILITIES
+   ========================================================================== */
+
+.kx-landing .stack {
+  display: flex;
+  flex-direction: column;
+}
+/* Opt out of an ancestor's uppercasing — Greek letters must not become capitals. */
+.kx-landing .no-caps {
+  text-transform: none;
+}
+.kx-landing .nowrap {
+  white-space: nowrap;
+}
+.kx-landing .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+/* ============================================================================
+   REDUCED MOTION  (spec 23)
+   Choreography is also disabled in JS; this covers CSS-driven motion.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+/* dropped: html — the application shell owns document-level layout */
+.kx-landing *,
+.kx-landing *::before,
+.kx-landing *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.12s !important;
+  }
+
+}
+/* ============================================================================
+   KAKSHA LANDING PROTOTYPE — SECTION STYLES
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- backdrop */
+
+.kx-landing .vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(130% 90% at 50% 42%, transparent 42%, rgba(2, 6, 13, 0.55) 100%),
+    linear-gradient(180deg, rgba(2, 6, 13, 0.55) 0%, transparent 16%, transparent 84%, rgba(2, 6, 13, 0.7) 100%);
+}
+.kx-landing .stage-fallback {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(60% 50% at 72% 34%, rgba(15, 63, 99, 0.35) 0%, transparent 68%),
+    radial-gradient(40% 40% at 20% 78%, rgba(20, 184, 166, 0.12) 0%, transparent 70%),
+    var(--bg);
+}
+/* -------------------------------------------------------------------- boot */
+
+.kx-landing .boot {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+}
+.kx-landing .boot__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+.kx-landing .boot__name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
+  margin-top: 0.5rem;
+}
+.kx-landing .boot__tag {
+  color: var(--text-faint);
+}
+.kx-landing .boot__bar {
+  width: 190px;
+  height: 1px;
+  background: rgba(148, 163, 184, 0.18);
+  margin-top: 1.25rem;
+  overflow: hidden;
+}
+.kx-landing .boot__bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--cyan);
+  transform-origin: left;
+  transition: transform 0.5s var(--ease-out);
+}
+.kx-landing .boot__step {
+  color: var(--cyan);
+  font-size: 0.5625rem;
+}
+/* ------------------------------------------------------------------- toast */
+
+.kx-landing .toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.75rem;
+  transform: translateX(-50%);
+  z-index: 60;
+  width: min(430px, calc(100vw - 2.5rem));
+  padding: 0.95rem 2.4rem 1rem 1.05rem;
+}
+.kx-landing .toast__title {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--moderate);
+  margin-bottom: 0.4rem;
+}
+.kx-landing .toast__body {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+.kx-landing .toast__close {
+  position: absolute;
+  top: 0.8rem;
+  right: 0.8rem;
+  color: var(--text-faint);
+  padding: 0.25rem;
+  line-height: 0;
+}
+.kx-landing .toast__close:hover {
+  color: var(--text);
+}
+/* ================================================================== NAV === */
+
+.kx-landing .nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  transition: background 0.5s var(--ease-out), border-color 0.5s var(--ease-out),
+    backdrop-filter 0.5s var(--ease-out);
+  border-bottom: 1px solid transparent;
+}
+.kx-landing .nav--scrolled {
+  background: rgba(2, 6, 13, 0.72);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border-bottom-color: var(--line);
+}
+.kx-landing .nav__inner {
+  max-width: var(--max-w);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+  height: var(--nav-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+.kx-landing .brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex: none;
+}
+.kx-landing .brand__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.kx-landing .brand__name {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+}
+.kx-landing .brand__tag {
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 0.15em;
+  color: var(--text-faint);
+}
+.kx-landing .nav__links {
+  display: flex;
+  align-items: center;
+  gap: clamp(1rem, 2.4vw, 2.1rem);
+}
+.kx-landing .nav__link {
+  position: relative;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  color: var(--text-dim);
+  padding: 0.4rem 0;
+  transition: color 0.35s var(--ease-out);
+}
+.kx-landing .nav__link:hover {
+  color: var(--text);
+}
+.kx-landing .nav__link.is-active {
+  color: var(--cyan);
+}
+.kx-landing .nav__link.is-active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--cyan);
+}
+.kx-landing .nav__right {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex: none;
+}
+.kx-landing .nav__cta {
+  padding: 0.6rem 1rem;
+  font-size: 0.625rem;
+}
+.kx-landing .nav__burger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  align-items: center;
+}
+.kx-landing .nav__burger-bar {
+  display: block;
+  width: 15px;
+  height: 1px;
+  background: var(--text);
+  transition: transform 0.32s var(--ease-out), opacity 0.32s var(--ease-out);
+}
+.kx-landing .nav__burger-bar.is-x1 {
+  transform: translateY(3px) rotate(45deg);
+}
+.kx-landing .nav__burger-bar.is-x2 {
+  transform: translateY(-3px) rotate(-45deg);
+}
+.kx-landing .nav__progress {
+  height: 1px;
+  background: rgba(148, 163, 184, 0.1);
+}
+.kx-landing .nav__progress-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--teal), var(--cyan));
+  transform-origin: left;
+  transform: scaleX(0);
+}
+.kx-landing .nav__sheet {
+  position: fixed;
+  top: var(--nav-h);
+  left: 0;
+  right: 0;
+  z-index: 49;
+  background: rgba(2, 6, 13, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--line);
+  padding: 0.5rem var(--gutter) 1.5rem;
+  display: none;
+  flex-direction: column;
+}
+.kx-landing .nav__sheet-link {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9rem;
+  padding: 0.95rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+.kx-landing .nav__sheet-link.is-active {
+  color: var(--cyan);
+}
+.kx-landing .nav__sheet-cta {
+  margin-top: 1.25rem;
+  justify-content: center;
+}
+/* ================================================================= HERO === */
+
+.kx-landing .hero {
+  padding-block: 0;
+}
+.kx-landing .hero__shell {
+  min-height: 100svh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.62fr);
+  gap: clamp(1.5rem, 4vw, 4rem);
+  align-items: center;
+  padding-top: calc(var(--nav-h) + clamp(1.5rem, 4vh, 3rem));
+  padding-bottom: clamp(6rem, 14vh, 8.5rem);
+}
+.kx-landing .hero__copy {
+  max-width: 580px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+.kx-landing .hero__headline {
+  margin: 0.35rem 0 0;
+}
+.kx-landing .hero__line {
+  display: block;
+  overflow: hidden;
+}
+.kx-landing .hero__line-inner {
+  display: block;
+  will-change: transform;
+}
+.kx-landing .hero__lede {
+  max-width: 42ch;
+}
+.kx-landing .hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.kx-landing .hero__metrics {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+.kx-landing .hero__metrics-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+.kx-landing .metric-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+.kx-landing .metric {
+  padding: 0.8rem 0.85rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.kx-landing .metric__value {
+  font-size: clamp(1.05rem, 1.7vw, 1.4rem);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+.kx-landing .metric__label {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.13em;
+  color: var(--text-dim);
+  line-height: 1.35;
+}
+.kx-landing .metric__sub {
+  font-size: 0.5rem;
+  color: var(--text-faint);
+  opacity: 0.75;
+}
+.kx-landing .hero__catalog {
+  position: relative;
+  justify-self: end;
+  align-self: center;
+  width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+/* The readout sits over the globe, so it carries its own soft scrim rather
+   than a hard panel — legible without boxing it in. */
+.kx-landing .hero__catalog::before {
+  content: '';
+  position: absolute;
+  inset: -1.1rem -1.4rem;
+  background: radial-gradient(
+    120% 90% at 60% 50%,
+    rgba(2, 6, 13, 0.82) 0%,
+    rgba(2, 6, 13, 0.55) 55%,
+    transparent 100%
+  );
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  pointer-events: none;
+  z-index: -1;
+}
+.kx-landing .hero__catalog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.kx-landing .catalog-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.kx-landing .catalog-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.15rem 0.5rem;
+}
+.kx-landing .catalog-row__label {
+  font-size: 0.5rem;
+  letter-spacing: 0.14em;
+}
+.kx-landing .catalog-row__value {
+  grid-column: 1 / -1;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+.kx-landing .catalog-row__bar {
+  grid-column: 1 / -1;
+  height: 1px;
+  background: rgba(148, 163, 184, 0.14);
+  overflow: hidden;
+}
+.kx-landing .catalog-row__bar-fill {
+  display: block;
+  height: 100%;
+  opacity: 0.7;
+}
+.kx-landing .hero__catalog-foot {
+  font-size: 0.5rem;
+  color: var(--text-faint);
+  opacity: 0.8;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--line);
+}
+.kx-landing .hero__foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: clamp(1.5rem, 4vh, 2.5rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  pointer-events: none;
+}
+.kx-landing .hero__tagline {
+  color: var(--text-dim);
+  letter-spacing: 0.2em;
+  font-size: 0.5625rem;
+  text-align: center;
+  padding-inline: 1rem;
+}
+.kx-landing .hero__scroll {
+  pointer-events: auto;
+  color: var(--text-dim);
+  line-height: 0;
+}
+.kx-landing .hero__scroll-ring {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  transition: border-color 0.4s var(--ease-out), color 0.4s var(--ease-out);
+  animation: nudge 2.6s var(--ease-io) infinite;
+}
+.kx-landing .hero__scroll:hover .hero__scroll-ring {
+  border-color: var(--line-cyan);
+  color: var(--cyan);
+}
+@keyframes nudge {
+  0%, 62%, 100% { transform: translateY(0); }
+  76% { transform: translateY(5px); }
+}
+/* =================================================== ORBITAL ENVIRONMENT == */
+
+.kx-landing .orbital {
+  min-height: 108vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 4rem;
+}
+.kx-landing .orbital__top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2rem;
+  align-items: start;
+}
+.kx-landing .orbital__copy {
+  position: relative;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+/* The globe passes behind this column at the widest breakpoints. */
+.kx-landing .orbital__copy::before {
+  content: '';
+  position: absolute;
+  inset: -1.5rem -3rem -1.5rem -2rem;
+  background: radial-gradient(
+    75% 65% at 30% 50%,
+    rgba(2, 6, 13, 0.8) 0%,
+    rgba(2, 6, 13, 0.45) 60%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: -1;
+}
+.kx-landing .orbital__title {
+  line-height: 1.06;
+}
+.kx-landing .orbital__legend {
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.kx-landing .orbital__legend-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--line);
+}
+.kx-landing .legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.kx-landing .legend__item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+}
+.kx-landing .legend__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: 0 0 10px currentColor;
+}
+.kx-landing .legend__label {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+  color: var(--text);
+}
+.kx-landing .legend__regime {
+  font-size: 0.5rem;
+  opacity: 0.75;
+}
+.kx-landing .orbital__legend-note {
+  font-size: 0.5rem;
+  color: var(--text-faint);
+  opacity: 0.8;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line);
+}
+.kx-landing .regime-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(1rem, 3vw, 3rem);
+  border-top: 1px solid var(--line);
+  padding-top: 1.5rem;
+}
+.kx-landing .regime {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.kx-landing .regime__name {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.15em;
+  color: var(--text);
+}
+.kx-landing .regime__range {
+  font-size: 0.8125rem;
+  color: var(--cyan);
+}
+.kx-landing .regime__bar {
+  height: 2px;
+  background: rgba(148, 163, 184, 0.12);
+  margin-block: 0.35rem 0.2rem;
+}
+.kx-landing .regime__bar-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--teal), var(--cyan));
+}
+.kx-landing .regime__note {
+  font-size: 0.5rem;
+  opacity: 0.8;
+}
+/* =========================================================== CONJUNCTION == */
+
+.kx-landing .conj {
+  min-height: 118vh;
+  display: flex;
+  align-items: center;
+}
+/* Three tracks, and the middle one is deliberately empty: that is the window
+   the two objects and their tracks are framed into on the WebGL stage. Putting
+   the readout in the same column as the encounter (the first attempt) buried
+   the thing the section is about. */
+.kx-landing .conj__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 380px) minmax(60px, 1fr) minmax(0, 470px);
+  gap: clamp(1rem, 2.5vw, 2.5rem);
+  align-items: center;
+  width: 100%;
+}
+.kx-landing .conj__copy {
+  grid-column: 1;
+}
+.kx-landing .conj__readout-wrap {
+  grid-column: 3;
+}
+.kx-landing .conj__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  max-width: 440px;
+}
+.kx-landing .conj__pair {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin-top: 0.4rem;
+}
+.kx-landing .conj__object {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--line);
+  border-left-width: 2px;
+}
+.kx-landing .conj__object--a {
+  border-left-color: var(--cyan);
+}
+.kx-landing .conj__object--b {
+  border-left-color: var(--high);
+}
+.kx-landing .conj__object-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.kx-landing .conj__object--a .conj__object-dot {
+  background: var(--cyan);
+  box-shadow: 0 0 12px var(--cyan);
+}
+.kx-landing .conj__object--b .conj__object-dot {
+  background: var(--high);
+  box-shadow: 0 0 12px var(--high);
+}
+.kx-landing .conj__object-name {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+}
+.kx-landing .conj__readout {
+  padding: 1.1rem 1.15rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.05rem;
+}
+.kx-landing .conj__readout-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+.kx-landing .stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 1.25rem;
+}
+.kx-landing .stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.kx-landing .stat__label {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.16em;
+  color: var(--text-faint);
+}
+.kx-landing .stat__value {
+  font-size: clamp(1.15rem, 2vw, 1.5rem);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+.kx-landing .stat__value em {
+  font-style: normal;
+  font-size: 0.6em;
+  font-weight: 400;
+  color: var(--text-faint);
+  margin-left: 0.1em;
+}
+.kx-landing .risk-bar {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.75rem;
+  align-items: baseline;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--risk) 35%, transparent);
+  background: color-mix(in srgb, var(--risk) 8%, transparent);
+}
+.kx-landing .risk-bar__label {
+  color: color-mix(in srgb, var(--risk) 80%, white);
+}
+.kx-landing .risk-bar__value {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--risk);
+  grid-row: 2;
+}
+.kx-landing .risk-bar__note {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: end;
+  font-size: 0.5rem;
+  opacity: 0.85;
+}
+/* ---- encounter transport ---- */
+
+.kx-landing .encounter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+.kx-landing .encounter__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.kx-landing .encounter__buttons {
+  display: flex;
+  gap: 0.45rem;
+}
+.kx-landing .encounter__play {
+  padding: 0.6rem 1rem;
+  font-size: 0.625rem;
+}
+.kx-landing .encounter__replay {
+  padding: 0.6rem 0.7rem;
+}
+.kx-landing .encounter__live {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+}
+.kx-landing .encounter__time {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cyan);
+}
+.kx-landing .encounter__phase {
+  font-size: 0.5rem;
+  color: var(--text-faint);
+}
+.kx-landing .encounter__track {
+  position: relative;
+  height: 22px;
+  display: flex;
+  align-items: center;
+}
+.kx-landing .encounter__track-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    rgba(34, 211, 238, 0.25),
+    rgba(239, 68, 68, 0.5) 50%,
+    rgba(34, 211, 238, 0.25)
+  );
+}
+.kx-landing .encounter__tca-mark {
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  bottom: 2px;
+  width: 1px;
+  background: var(--critical);
+  opacity: 0.75;
+}
+.kx-landing .encounter__head-dot {
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  margin-left: -5.5px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.9);
+  pointer-events: none;
+}
+.kx-landing .encounter__range {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: ew-resize;
+}
+.kx-landing .encounter__range:focus-visible {
+  opacity: 0.001;
+  outline-offset: 6px;
+}
+.kx-landing .encounter__ticks {
+  position: relative;
+  height: 12px;
+}
+.kx-landing .encounter__tick {
+  position: absolute;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.kx-landing .encounter__tick.is-tca {
+  color: var(--critical);
+}
+.kx-landing .encounter__sep {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--line);
+}
+.kx-landing .encounter__sep-value {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.kx-landing .encounter__sep-value em {
+  font-style: normal;
+  font-size: 0.62em;
+  font-weight: 400;
+  color: var(--text-faint);
+}
+.kx-landing .conj__scale-note {
+  font-size: 0.5rem;
+  line-height: 1.65;
+  color: var(--text-faint);
+  opacity: 0.85;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--line);
+}
+/* ---- labels riding on the 3D objects ---- */
+
+.kx-landing .scene-label {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.kx-landing .scene-label__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid var(--line);
+  background: rgba(2, 6, 13, 0.62);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.kx-landing .scene-label__title {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+}
+.kx-landing .scene-label__sub {
+  font-size: 0.4375rem;
+  opacity: 0.8;
+}
+.kx-landing .scene-label--a .scene-label__inner {
+  border-color: rgba(34, 211, 238, 0.45);
+}
+.kx-landing .scene-label--a .scene-label__title {
+  color: var(--cyan);
+}
+.kx-landing .scene-label--b .scene-label__inner {
+  border-color: rgba(249, 115, 22, 0.45);
+}
+.kx-landing .scene-label--b .scene-label__title {
+  color: var(--high);
+}
+.kx-landing .scene-label--tca .scene-label__inner {
+  border-color: rgba(239, 68, 68, 0.5);
+  padding-block: 0.2rem;
+}
+.kx-landing .scene-label--tca .scene-label__title {
+  color: var(--critical);
+  font-size: 0.5625rem;
+}
+/* ============================================================== PIPELINE == */
+
+.kx-landing .pipeline {
+  min-height: 92vh;
+  display: flex;
+  align-items: center;
+}
+.kx-landing .pipeline__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr);
+  gap: 2rem;
+  align-items: end;
+  margin-bottom: clamp(2.5rem, 6vh, 4rem);
+}
+.kx-landing .pipeline__lede {
+  max-width: 40ch;
+}
+.kx-landing .pipeline__row {
+  display: grid;
+  /* 8 node tracks with a connector track between each — the children alternate
+     node/link/node, so the tracks must alternate too. */
+  grid-template-columns: repeat(7, minmax(0, 1fr) auto) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 0;
+}
+.kx-landing .pipeline__link {
+  align-self: center;
+  position: relative;
+  height: 1px;
+  width: clamp(14px, 2.4vw, 40px);
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0.05), rgba(34, 211, 238, 0.45));
+  transform-origin: left;
+  margin-top: 6px;
+}
+.kx-landing .pipeline__link-arrow {
+  position: absolute;
+  right: -1px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-top: 1px solid var(--cyan);
+  border-right: 1px solid var(--cyan);
+  transform: translateY(-50%) rotate(45deg);
+  opacity: 0.75;
+}
+.kx-landing .pipeline__node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 1rem 0.4rem 0.9rem;
+  text-align: center;
+  border: 1px solid transparent;
+  transition: border-color 0.4s var(--ease-out), background 0.4s var(--ease-out),
+    transform 0.4s var(--ease-out);
+}
+.kx-landing .pipeline__node:hover,
+.kx-landing .pipeline__node.is-active {
+  border-color: var(--line-cyan);
+  background: rgba(34, 211, 238, 0.045);
+}
+.kx-landing .pipeline__node-index {
+  font-size: 0.5rem;
+  color: var(--text-faint);
+  opacity: 0.7;
+}
+.kx-landing .pipeline__node-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  transition: color 0.4s var(--ease-out), border-color 0.4s var(--ease-out),
+    box-shadow 0.4s var(--ease-out);
+}
+.kx-landing .pipeline__node.is-active .pipeline__node-icon {
+  color: var(--cyan);
+  border-color: var(--line-cyan);
+  box-shadow: 0 0 26px -6px rgba(34, 211, 238, 0.65), inset 0 0 20px -14px var(--cyan);
+}
+.kx-landing .pipeline__node-title {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  line-height: 1.35;
+  color: var(--text);
+}
+.kx-landing .pipeline__node-sub {
+  font-size: 0.4375rem;
+  letter-spacing: 0.14em;
+  opacity: 0.75;
+}
+.kx-landing .pipeline__detail {
+  margin-top: clamp(2rem, 5vh, 3rem);
+}
+.kx-landing .pipeline__detail-rule {
+  display: block;
+  height: 1px;
+  background: var(--line);
+  margin-bottom: 1.1rem;
+}
+.kx-landing .pipeline__detail-text {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: var(--text-dim);
+  max-width: 68ch;
+  min-height: 3.2em;
+}
+.kx-landing .pipeline__detail-stage {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.18em;
+  color: var(--cyan);
+  margin-bottom: 0.4rem;
+}
+/* =============================================================== B-PLANE == */
+
+.kx-landing .bplane {
+  min-height: 112vh;
+  display: flex;
+  align-items: center;
+}
+.kx-landing .bplane__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1fr);
+  gap: clamp(1.5rem, 4vw, 4rem);
+  align-items: center;
+  width: 100%;
+}
+.kx-landing .bplane__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  max-width: 440px;
+}
+.kx-landing .bplane__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 1.5rem;
+  margin: 0.5rem 0 0;
+  padding: 1rem 0 0;
+  border-top: 1px solid var(--line);
+}
+.kx-landing .bplane__facts dt {
+  font-size: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.kx-landing .bplane__facts dd {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--text);
+}
+.kx-landing .bplane__facts dd em {
+  font-style: normal;
+  font-size: 0.68em;
+  color: var(--text-faint);
+}
+.kx-landing .bplane__facts sub {
+  font-size: 0.66em;
+}
+.kx-landing .bplane__controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.3rem;
+}
+.kx-landing .seg {
+  display: flex;
+  border: 1px solid var(--line);
+}
+.kx-landing .seg__btn {
+  padding: 0.5rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  transition: background 0.3s var(--ease-out), color 0.3s var(--ease-out);
+}
+.kx-landing .seg__btn + .seg__btn {
+  border-left: 1px solid var(--line);
+}
+.kx-landing .seg__btn.is-on {
+  background: rgba(34, 211, 238, 0.1);
+  color: var(--cyan);
+}
+.kx-landing .bplane__reset {
+  padding: 0.5rem 0.85rem;
+  font-size: 0.625rem;
+}
+.kx-landing .bplane__hint {
+  font-size: 0.5rem;
+  opacity: 0.7;
+}
+.kx-landing .bplane__figure {
+  padding: 1rem 1rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.kx-landing .bplane__figure-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--line);
+}
+.kx-landing .bplane__svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+.kx-landing .bplane__svg:active {
+  cursor: grabbing;
+}
+.kx-landing .bplane__svg-label {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.13em;
+}
+.kx-landing .bplane__svg-value {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.kx-landing .bplane__figure-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line);
+}
+.kx-landing .bplane__figure-foot .kx-label {
+  font-size: 0.5rem;
+  opacity: 0.8;
+}
+/* ==================================================================== AI == */
+
+.kx-landing .ai {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+}
+.kx-landing .ai__head {
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin-bottom: clamp(1.25rem, 3vh, 2rem);
+}
+.kx-landing .ai__title {
+  font-size: clamp(2rem, 4.2vw, 3.2rem);
+  line-height: 1.03;
+}
+.kx-landing .ai__lede {
+  max-width: 68ch;
+}
+.kx-landing .chain {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr) auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 0;
+}
+.kx-landing .chain__arrow {
+  height: 1px;
+  width: clamp(20px, 3vw, 56px);
+  align-self: center;
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0.08), rgba(34, 211, 238, 0.4));
+  transform-origin: left;
+  position: relative;
+}
+.kx-landing .chain__arrow::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-top: 1px solid var(--cyan);
+  border-right: 1px solid var(--cyan);
+  transform: translateY(-50%) rotate(45deg);
+  opacity: 0.7;
+}
+.kx-landing .chain__node {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--line);
+  background: rgba(8, 17, 28, 0.5);
+  min-width: 0;
+}
+.kx-landing .chain__node--authority {
+  border-color: var(--line-cyan);
+  background: rgba(34, 211, 238, 0.055);
+}
+.kx-landing .chain__node--model {
+  border-style: dashed;
+  border-color: rgba(148, 163, 184, 0.3);
+}
+.kx-landing .chain__index {
+  font-size: 0.4375rem;
+  opacity: 0.65;
+}
+.kx-landing .chain__label {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  color: var(--text);
+}
+.kx-landing .chain__node--authority .chain__label {
+  color: var(--cyan);
+}
+.kx-landing .chain__note {
+  font-size: 0.4375rem;
+  letter-spacing: 0.11em;
+  opacity: 0.8;
+  line-height: 1.5;
+}
+.kx-landing .chain__caption {
+  margin-top: 0.9rem;
+  font-size: 0.5rem;
+  color: var(--text-faint);
+  letter-spacing: 0.2em;
+}
+.kx-landing .ai__panel {
+  margin-top: clamp(1rem, 2.4vh, 1.5rem);
+  padding: 1rem 1.2rem 1.05rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.kx-landing .ai__panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--line);
+}
+.kx-landing .ai__panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: var(--cyan);
+}
+.kx-landing .ai__panel-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.kx-landing .ai__badge {
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--teal);
+  border: 1px solid rgba(20, 184, 166, 0.32);
+  background: rgba(20, 184, 166, 0.07);
+  padding: 0.22em 0.55em;
+}
+.kx-landing .ai__inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.kx-landing .ai__inputs-label {
+  font-size: 0.5rem;
+}
+.kx-landing .ai__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.kx-landing .ai__chip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.015);
+}
+.kx-landing .ai__chip .kx-label {
+  font-size: 0.4375rem;
+}
+.kx-landing .ai__chip .readout {
+  font-size: 0.8125rem;
+  color: var(--text);
+}
+.kx-landing .ai__body {
+  font-size: clamp(0.9rem, 1.05vw, 0.9875rem);
+  line-height: 1.66;
+  color: var(--text-dim);
+  max-width: 78ch;
+}
+.kx-landing .ai__cited {
+  color: var(--text);
+  font-weight: 500;
+  border-bottom: 1px solid rgba(34, 211, 238, 0.4);
+  padding-bottom: 1px;
+}
+.kx-landing .ai__disclaimers {
+  list-style: none;
+  margin: 0;
+  padding: 0.9rem 0 0;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.kx-landing .ai__disclaimers li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.6rem;
+  align-items: start;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--text-faint);
+}
+.kx-landing .ai__disclaimers li svg {
+  margin-top: 0.2em;
+  color: var(--teal);
+}
+.kx-landing .ai__disclaimers--strong {
+  color: var(--text-dim) !important;
+}
+.kx-landing .ai__disclaimers--strong svg {
+  color: var(--moderate) !important;
+}
+.kx-landing .ai__foot {
+  padding-top: 0.2rem;
+}
+.kx-landing .ai__foot .kx-label {
+  font-size: 0.4375rem;
+  opacity: 0.7;
+}
+/* =================================================================== CTA == */
+
+.kx-landing .cta {
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  text-align: center;
+}
+.kx-landing .cta__inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  padding-bottom: clamp(4rem, 12vh, 8rem);
+}
+/* The closing frame is a lit night horizon, so the copy needs its own ground. */
+.kx-landing .cta__inner::before {
+  content: '';
+  position: absolute;
+  inset: -6% -12% -4%;
+  background: radial-gradient(
+    62% 58% at 50% 42%,
+    rgba(2, 6, 13, 0.86) 0%,
+    rgba(2, 6, 13, 0.62) 52%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: -1;
+}
+.kx-landing .cta__title {
+  font-size: clamp(2.2rem, 5.4vw, 4.2rem);
+  line-height: 1.02;
+}
+.kx-landing .cta__lede {
+  max-width: 50ch;
+  text-align: center;
+}
+.kx-landing .cta__action {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.kx-landing .cta__btn {
+  padding: 1rem 2rem;
+  font-size: 0.75rem;
+}
+.kx-landing .cta__ack {
+  padding: 1.1rem 1.3rem;
+  max-width: 460px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.kx-landing .cta__ack-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--teal);
+}
+.kx-landing .cta__ack-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--teal);
+  box-shadow: 0 0 12px var(--teal);
+}
+.kx-landing .cta__ack-body {
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  color: var(--text-dim);
+}
+.kx-landing .cta__ack-reset {
+  align-self: flex-start;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.5625rem;
+}
+.kx-landing .cta__foot {
+  letter-spacing: 0.22em;
+  font-size: 0.5rem;
+  color: var(--text-faint);
+}
+/* ================================================================ FOOTER == */
+
+.kx-landing .footer {
+  padding-bottom: 2.5rem;
+  background: linear-gradient(180deg, transparent, rgba(2, 6, 13, 0.85) 55%);
+}
+.kx-landing .footer__inner {
+  padding-top: 2rem;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 1.5rem 2rem;
+  align-items: center;
+}
+.kx-landing .footer__brand {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.kx-landing .footer__name {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+}
+.kx-landing .footer__brand .kx-label {
+  font-size: 0.4375rem;
+}
+.kx-landing .footer__links {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 1.4rem;
+}
+.kx-landing .footer__link {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.16em;
+  color: var(--text-faint);
+  transition: color 0.35s var(--ease-out);
+}
+.kx-landing .footer__link:hover {
+  color: var(--cyan);
+}
+.kx-landing .footer__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+  text-align: right;
+}
+.kx-landing .footer__meta .kx-label {
+  font-size: 0.4375rem;
+  color: var(--text-faint);
+  opacity: 0.85;
+}
+/* ============================================================================
+   RESPONSIVE (spec 22)
+   ========================================================================== */
+
+@media (max-width: 1180px) {
+.kx-landing .pipeline__row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.6rem 0;
+  }
+/* Connectors only make sense on a single line — hide them once the row wraps. */
+  .kx-landing .pipeline__link {
+    display: none;
+  }
+.kx-landing .pipeline__node {
+    border-color: var(--line);
+  }
+.kx-landing .chain {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+.kx-landing .chain__arrow {
+    display: none;
+  }
+
+}
+@media (max-width: 1020px) {
+.kx-landing .nav__links {
+    display: none;
+  }
+.kx-landing .nav__burger {
+    display: flex;
+  }
+.kx-landing .nav__sheet {
+    display: flex;
+  }
+.kx-landing .nav__cta {
+    display: none;
+  }
+.kx-landing .hero__shell {
+    grid-template-columns: minmax(0, 1fr);
+    align-content: center;
+    gap: 2.5rem;
+  }
+.kx-landing .hero__catalog {
+    justify-self: start;
+    width: 100%;
+    max-width: 420px;
+  }
+.kx-landing .catalog-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 1rem;
+  }
+.kx-landing .conj__grid,
+.kx-landing .bplane__grid,
+.kx-landing .orbital__top,
+.kx-landing .pipeline__head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+.kx-landing .conj__copy,
+.kx-landing .conj__readout-wrap {
+    grid-column: 1;
+  }
+.kx-landing .orbital__legend {
+    width: 100%;
+    max-width: 420px;
+  }
+.kx-landing .pipeline__head {
+    align-items: start;
+    gap: 1.25rem;
+  }
+
+}
+@media (max-width: 820px) {
+.kx-landing {
+    --nav-h: 60px;
+  }
+.kx-landing .brand__tag {
+    display: none;
+  }
+/* A single-column layout leaves no clear gutter for the globe, so the whole
+     stage is scrimmed rather than moved. Earth stays visible (spec 22) but the
+     copy above it stays readable, which a repositioned camera cannot achieve
+     when the text fills the viewport. */
+  .kx-landing .vignette {
+    background:
+      linear-gradient(
+        180deg,
+        rgba(2, 6, 13, 0.8) 0%,
+        rgba(2, 6, 13, 0.6) 40%,
+        rgba(2, 6, 13, 0.62) 62%,
+        rgba(2, 6, 13, 0.86) 100%
+      ),
+      radial-gradient(120% 80% at 50% 45%, transparent 30%, rgba(2, 6, 13, 0.5) 100%);
+  }
+.kx-landing .hero__shell {
+    padding-bottom: clamp(7rem, 18vh, 10rem);
+  }
+.kx-landing .metric-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+.kx-landing .regime-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+  }
+.kx-landing .orbital,
+.kx-landing .conj,
+.kx-landing .pipeline,
+.kx-landing .bplane,
+.kx-landing .ai {
+    min-height: 0;
+  }
+.kx-landing .stat-grid {
+    gap: 0.85rem 1rem;
+  }
+.kx-landing .bplane__facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem 1rem;
+  }
+.kx-landing .footer__inner {
+    grid-template-columns: minmax(0, 1fr);
+    text-align: left;
+  }
+.kx-landing .footer__links {
+    justify-content: flex-start;
+    gap: 1rem;
+  }
+.kx-landing .footer__meta {
+    align-items: flex-start;
+    text-align: left;
+  }
+/* In-scene labels crowd a phone screen; the section copy carries the names. */
+  .kx-landing .scene-label--b .scene-label__sub,
+.kx-landing .scene-label--a .scene-label__sub {
+    display: none;
+  }
+
+}
+@media (max-width: 620px) {
+/* Brand, prototype pill and menu button have to co-exist in ~360px. */
+  .kx-landing .brand__name {
+    font-size: 0.9375rem;
+    letter-spacing: 0.16em;
+  }
+.kx-landing .nav__right {
+    gap: 0.5rem;
+  }
+.kx-landing .nav__inner {
+    gap: 0.5rem;
+  }
+.kx-landing .pipeline__row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+.kx-landing .encounter__head {
+    align-items: flex-start;
+  }
+.kx-landing .encounter__live {
+    align-items: flex-start;
+  }
+.kx-landing .encounter__tick {
+    font-size: 0.4375rem;
+  }
+/* Only the outer two and TCA stay legible at this width. */
+  .kx-landing .encounter__tick:nth-child(2),
+.kx-landing .encounter__tick:nth-child(4) {
+    display: none;
+  }
+.kx-landing .risk-bar__note {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-self: start;
+    padding-top: 0.3rem;
+  }
+.kx-landing .ai__title,
+.kx-landing .cta__title {
+    font-size: clamp(1.9rem, 9vw, 2.6rem);
+  }
+.kx-landing .h-display {
+    font-size: clamp(2.2rem, 11vw, 3.2rem);
+  }
+.kx-landing .toast {
+    bottom: 1rem;
+  }
+
+}
+/* Reduced motion: stop the only looping CSS animation on the page. */
+@media (prefers-reduced-motion: reduce) {
+.kx-landing .hero__scroll-ring {
+    animation: none;
+  }
+
+}
+
