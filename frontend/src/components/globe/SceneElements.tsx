@@ -2,10 +2,35 @@
  * KAKSHA -- supporting scene elements: starfield, orbit paths, conjunction
  * markers and the equatorial reference grid.
  */
-import { useFrame, useThree } from "@react-three/fiber";
+import { extend, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { KM_PER_UNIT } from "./Earth";
+
+/**
+ * Register THREE.Line with react-three-fiber under the name `threeLine`.
+ *
+ * THIS LINE IS WHY THE 3D VIEW WOULD NOT START.
+ *
+ * R3F resolves a lowercase JSX tag by PascalCasing it and looking the result
+ * up in its catalogue, which is seeded from the THREE namespace. `<threeLine>`
+ * becomes `ThreeLine`, which is not a THREE export, so R3F threw
+ *
+ *     R3F: ThreeLine is not part of the THREE namespace! Did you forget to extend?
+ *
+ * the instant it tried to build the scene graph -- before a single frame was
+ * drawn. Every orbit path, the conjunction connector, the reference grid and
+ * the regime shells use this element, so the throw was unavoidable on any
+ * successful open of the globe.
+ *
+ * The obvious tag would be `<line>`, which R3F does map to THREE.Line, but it
+ * collides with SVG's `<line>` in React's JSX typings and produces a type
+ * error on every use. Registering our own non-colliding name is the fix that
+ * keeps both the compiler and the renderer happy; `extend` is exactly the
+ * mechanism R3F provides for it. It must run at module scope so the catalogue
+ * is populated before any of these components render.
+ */
+extend({ ThreeLine: THREE.Line });
 
 /**
  * Background star field.
@@ -138,6 +163,20 @@ export function OrbitPath({
       (lineRef.current as unknown as THREE.Line).computeLineDistances();
     }
   }, [dashed, geometry]);
+
+  /**
+   * Release the GPU buffer when this path is replaced or unmounted.
+   *
+   * A 320-vertex orbit is small, but this component remounts on every
+   * selection change and every conjunction, and three.js does not garbage
+   * collect GPU resources -- an undisposed BufferGeometry keeps its VBO alive
+   * for the lifetime of the context. Over a demo's worth of clicking that is a
+   * steady, invisible leak on exactly the integrated GPUs least able to spare
+   * the memory.
+   */
+  useEffect(() => {
+    return () => geometry.dispose();
+  }, [geometry]);
 
   if (positionsKm.length < 6) return null;
 
